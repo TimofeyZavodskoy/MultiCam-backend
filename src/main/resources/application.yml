@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: application.properties
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+
+logging:
+  level:
+    org:
+      springframework:
+        web: DEBUG
+
+server:
+  port: 8080
+
+# ─── Локальная VLM (vLLM / Qwen2.5-VL) ────────────────────────────────────
+llm:
+  local:
+    base-url: http://127.0.0.1:8000
+    model: Qwen/Qwen3-VL-2B-Instruct
+    # Низкая температура — минимизируем галлюцинации, максимизируем детерминизм
+    temperature: 0.01
+    connect-timeout-ms: 10000
+    response-timeout-seconds: 1800
+
+# ─── DeepSeek API (облачный решатель математики) ───────────────────────────
+deepseek:
+  api:
+    # Устанавливать через переменную окружения: DEEPSEEK_API_KEY=sk-...
+    # Никогда не коммитить ключ в репозиторий!
+    key: ${DEEPSEEK_API_KEY:}
+    base-url: https://api.deepseek.com
+    model: deepseek-chat
+    temperature: 0.1
+    max-tokens: 4096
+    connect-timeout-ms: 10000
+    response-timeout-seconds: 120

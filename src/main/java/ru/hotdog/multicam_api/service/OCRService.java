@@ -1,5 +1,7 @@
 package ru.hotdog.multicam_api.service;
 
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
 import io.netty.channel.ChannelOption;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
@@ -11,8 +13,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 import ru.hotdog.multicam_api.dto.DetectedObj;
 import ru.hotdog.multicam_api.dto.OCRResponse;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.core.type.TypeReference;
+import ru.hotdog.multicam_api.dto.SearchResult;
 
 import java.time.Duration;
 import java.util.Base64;
@@ -26,9 +27,6 @@ import java.util.concurrent.TimeUnit;
 @Service
 @Slf4j
 public class OCRService {
-
-    // Промпты для моделей. Тут вся инструкция по поведению: как именно извлекать формулы, в каком формате ждать ответ по еде и как оформлять решение
-    //'image' if you see nothing interesting just photos "
 
     private static final String SYSTEM_PROMPT = """
             You are a precise visual analysis engine. Obey these rules without exception:
@@ -56,13 +54,13 @@ public class OCRService {
             """;
 
     private static final String EXTRACT_PROMPT = """
-            You are a precise OCR assistant.
-            Transcribe the mathematical problem from the image into LaTeX format exactly.
-            - Use tg, ctg notation (Soviet style).
-            - Do NOT solve. Just transcribe.
-            - Output ONLY the LaTeX code. Nothing else.
-            """;
-
+        You are a precise OCR assistant.
+        Transcribe the mathematical problem from the image into LaTeX format exactly.
+        - Use tg, ctg notation (Soviet style).
+        - Do NOT solve. Just transcribe.
+        - IMPORTANT: You must wrap all your reasoning and thoughts inside <think>...</think> tags.
+        - After the </think> tag, output ONLY the LaTeX code. Nothing else.
+        """;
 
     private static final String MATH_SOLVER_PROMPT = """
             You are a strict Mathematics Professor. Solve the following problem step-by-step.
@@ -91,14 +89,11 @@ public class OCRService {
             Language: RUSSIAN. Be concise.
             """;
 
-
     private static final String FOOD_PROMPT = """
-            Analyze the food in this image as a nutritionist.
-            Estimate nutritional values for the ENTIRE visible portion.
-            Return ONLY this JSON object with integer values. No markdown, no explanation:
-            {"mass": 0, "calories": 0, "proteins": 0, "fats": 0, "carbs": 0}
+            Act as a nutritionist. Analyze food image.
+            Return ONLY JSON: {"mass": int, "calories": int, "proteins": int, "fats": int, "carbs": int}.
+            No markdown.
             """;
-
 
     private static final String DETECT_PROMPT = """
             Detect and list the main physical objects in this image.
@@ -117,67 +112,64 @@ public class OCRService {
             - If no meaningful objects found: return []
             """;
 
-
     private static final String MATH_PROMPT =
             """
-            You are a strict Academic Tutor specializing in Mathematics (Algebra, Calculus, Trig) and Physics.
-              Your goal is 100% accuracy. You must assume the user is a student who needs to see EVERY intermediate step.
-        
-              ═══════════════════════════════════════════
-              GLOBAL CONSTRAINTS
-              ═══════════════════════════════════════════
-              1. LANGUAGE: Output must be entirely in RUSSIAN.
-              2. NOTATION: Use Soviet notation: 'tg' for tangent, 'ctg' for cotangent. NEVER use 'tan' or 'cot'.
-              3. ATOMIC STEPS: Perform only ONE logical or algebraic operation per step. Do not combine simplification and substitution in one line.
-              4. VERBOSITY: Do not summarize. Show full intermediate expressions.\s
-                 - BAD: "Simplify to get x=5"
-                 - GOOD: Show the equation, then show the simplified equation, then the result.
-        
-              ═══════════════════════════════════════════
-              REASONING PROTOCOL (INTERNAL)
-              ═══════════════════════════════════════════
-              Before generating the final LaTeX math block for any step, you must mentally verify:
-              - Are signs (+/-) correct?
-              - Did I miss a coefficient (like 1/3 or sqrt(3))?
-              - Is the domain (ОДЗ) respected?
-        
-              ═══════════════════════════════════════════
-              OUTPUT STRUCTURE
-              ═══════════════════════════════════════════
-              Follow this exact Markdown structure:
-        
-              ### Анализ задачи
-              Briefly describe what is given and what is needed. If there is an image, describe the visible graph/formula text.
-        
-              ### ОДЗ (Domain)
-              Determine the valid domain for x. If none, write "ОДЗ: x ∈ R".
-        
-              ### План решения
-              List the strategy (e.g., "1. Group terms. 2. Use Pythagorean identity. 3. Solve quadratic.").
-        
-              ### Решение
-              Execute the plan step-by-step.\s
-              Format for each step:
-              **Шаг N:** [Name of operation]
-              [Explanation in Russian]
-              $$ [LaTeX Math Block] $$
-        
-              ### Проверка
-              Substitute the result back into the original expression to verify correctness.
-        
-              ### Ответ
-              Final answer clearly stated.
-              $$ \\boxed{ [Answer] } $$
-        
-              ═══════════════════════════════════════════
-              CRITICAL REMINDERS
-              ═══════════════════════════════════════════
-              - For Trig: $\\sin^2 x + \\cos^2 x = 1$.
-              - For Physics: Show formula -> Show substitution with units -> Show result.
-              - Never skip the "Plan" section. It grounds your logic.      
-                """;
-
-    private final String vllmApiUrl = "http://172.22.168.73:8000/v1/chat/completions";
+                    You are a strict Academic Tutor specializing in Mathematics (Algebra, Calculus, Trig) and Physics.
+                      Your goal is 100% accuracy. You must assume the user is a student who needs to see EVERY intermediate step.
+                    
+                      ═══════════════════════════════════════════
+                      GLOBAL CONSTRAINTS
+                      ═══════════════════════════════════════════
+                      1. LANGUAGE: Output must be entirely in RUSSIAN.
+                      2. NOTATION: Use Soviet notation: 'tg' for tangent, 'ctg' for cotangent. NEVER use 'tan' or 'cot'.
+                      3. ATOMIC STEPS: Perform only ONE logical or algebraic operation per step. Do not combine simplification and substitution in one line.
+                      4. VERBOSITY: Do not summarize. Show full intermediate expressions.
+                         - BAD: "Simplify to get x=5"
+                         - GOOD: Show the equation, then show the simplified equation, then the result.
+                    
+                      ═══════════════════════════════════════════
+                      REASONING PROTOCOL (INTERNAL)
+                      ═══════════════════════════════════════════
+                      Before generating the final LaTeX math block for any step, you must mentally verify:
+                      - Are signs (+/-) correct?
+                      - Did I miss a coefficient (like 1/3 or sqrt(3))?
+                      - Is the domain (ОДЗ) respected?
+                    
+                      ═══════════════════════════════════════════
+                      OUTPUT STRUCTURE
+                      ═══════════════════════════════════════════
+                      Follow this exact Markdown structure:
+                    
+                      ### Анализ задачи
+                      Briefly describe what is given and what is needed. If there is an image, describe the visible graph/formula text.
+                    
+                      ### ОДЗ (Domain)
+                      Determine the valid domain for x. If none, write "ОДЗ: x ∈ R".
+                    
+                      ### План решения
+                      List the strategy (e.g., "1. Group terms. 2. Use Pythagorean identity. 3. Solve quadratic.").
+                    
+                      ### Решение
+                      Execute the plan step-by-step.
+                      Format for each step:
+                      **Шаг N:** [Name of operation]
+                      [Explanation in Russian]
+                      $$ [LaTeX Math Block] $$
+                    
+                      ### Проверка
+                      Substitute the result back into the original expression to verify correctness.
+                    
+                      ### Ответ
+                      Final answer clearly stated.
+                      $$ \\boxed{ [Answer] } $$
+                    
+                      ═══════════════════════════════════════════
+                      CRITICAL REMINDERS
+                      ═══════════════════════════════════════════
+                      - For Trig: $\\sin^2 x + \\cos^2 x = 1$.
+                      - For Physics: Show formula -> Show substitution with units -> Show result.
+                      - Never skip the "Plan" section. It grounds your logic.
+                    """;
 
     @Value("${deepseek.api.key:}")
     private String deepSeekApiKey;
@@ -190,7 +182,6 @@ public class OCRService {
 
     @Value("${llm.local.temperature:0.01}")
     private double localTemperature;
-    private final String deepSeekApiUrl = "https://api.deepseek.com/v1/chat/completions";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final WebClient localWebClient;
@@ -199,19 +190,25 @@ public class OCRService {
     private final ObjectFilterService objectFilterService;
     private final ProductSearchService productSearchService;
 
+    public OCRService(WebClient.Builder webClientBuilder,
+                      ObjectFilterService objectFilterService,
+                      ProductSearchService productSearchService) {
 
-    public OCRService(WebClient.Builder webClientBuilder) {
-
+        log.info("[INIT] Инициализация OCRService...");
 
         HttpClient localHttpClient = HttpClient.create()
-                // Выставил большие таймауты, потому что нейронки на тяжелых изображениях долго думают
+                .noProxy()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 100000)
                 .responseTimeout(Duration.ofSeconds(1800))
                 .doOnConnected(conn -> conn
                         .addHandlerLast(new ReadTimeoutHandler(1800, TimeUnit.SECONDS))
                         .addHandlerLast(new WriteTimeoutHandler(1800, TimeUnit.SECONDS)));
 
-        this.localWebClient = webClientBuilder.baseUrl("http://172.22.168.73:8000").build();
+        this.localWebClient = webClientBuilder
+                .baseUrl("http://127.0.0.1:8000")
+                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(localHttpClient))
+                .build();
+        log.info("[INIT] Local WebClient настроен на http://127.0.0.1:8000 с таймаутом 1800 сек.");
 
         HttpClient deepSeekHttpClient = HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
@@ -219,135 +216,181 @@ public class OCRService {
 
         this.deepSeekWebClient = webClientBuilder
                 .baseUrl("https://api.deepseek.com")
+                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(deepSeekHttpClient))
                 .build();
+        log.info("[INIT] DeepSeek WebClient настроен.");
 
         this.objectFilterService = objectFilterService;
         this.productSearchService = productSearchService;
     }
 
     public CompletableFuture<OCRResponse> processRequest(byte[] imageBytes) {
-        log.info("Начинаем обработку: отправка в классификатор...");
+        log.info("[PIPELINE-START] Получен запрос на обработку. Размер изображения: {} байт", imageBytes.length);
 
-        // Сначала определяем тип контента. Это экономит токены и позволяет юзать разные модели для разных задач.
-        return sendTolVllm(imageBytes, CLASSIFIER_PROMPT, 128)
-                .thenComposeAsync(category -> {
-                    String cleanCategory = category.toLowerCase().trim().replaceAll("[^a-z]", "");
-
-                    if (cleanCategory.contains("math") || cleanCategory.contains("mixed")) {
-                        cleanCategory = "math";
-                    } else if (cleanCategory.contains("food")) {
-                        cleanCategory = "food";
-                    }
-
-                    log.info("Классификация: {}", cleanCategory);
-
-                    return switch (cleanCategory) {
-
-                        case "math", "mixed" ->
-                                sendTolVllm(imageBytes, EXTRACT_PROMPT, 1024)
-                                        .thenComposeAsync(extractedLaTeX -> {
-                                            log.info("Извлекли задачу: {}", extractedLaTeX);
-                                            return callMathSolver(extractedLaTeX);
-                                        }, executor)
-                                        .thenApply(solution -> {
-                                            OCRResponse r = new OCRResponse();
-                                            r.setTag("math");
-                                            r.setSolution(solution);
-                                            r.setResult(solution);
-                                            return r;
-                                        })
-                                        .exceptionally(ex -> {
-                                            //отправка на локалку если что-то с api дипсика
-                                            if (ex.getMessage().contains("Payment Required") || ex.getMessage().contains("облачная модель")) {
-                                                log.warn("⚠️ Облако недоступно, пробую решить локально...");
-                                                return sendTolVllm(imageBytes, MATH_PROMPT + "\n\nSolve locally if possible.", 4096)
-                                                        .thenApply(res -> {
-                                                            OCRResponse r = new OCRResponse();
-                                                            r.setTag("math");
-                                                            r.setResult(res + "\n\n⚠️ *Решено локальной моделью*");
-                                                            return r;
-                                                        }).join();
-                                            }
-                                            return null;
-                                        });
-
-                        case "text" -> sendTolVllm(imageBytes, OCR_PROMPT, 1024)
-                                .thenApply(res -> {
-                                    OCRResponse r = new OCRResponse();
-                                    r.setTag("text");
-                                    r.setResult(res);
-                                    return r;
-                                });
-
-                        case "food" -> sendTolVllm(imageBytes, FOOD_PROMPT, 512)
-                                .thenApply(jsonStr -> {
-                                    try {
-                                        String cleanJson = jsonStr.replaceAll("```json\\s*", "").replaceAll("```", "").trim();
-                                        OCRResponse r = objectMapper.readValue(cleanJson, OCRResponse.class);
-                                        r.setTag("food");
-                                        return r;
-                                    } catch (Exception e) {
-                                        log.error("Ошибка парсинга еды", e);
-                                        OCRResponse err = new OCRResponse();
-                                        err.setTag("food");
-                                        err.setResult("Ошибка разбора данных о еде");
-                                        return err;
-                                    }
-                                });
-
-                        case "objects" -> sendTolVllm(imageBytes, DETECT_PROMPT, 1024)
-                                .thenApply(jsonStr -> {
-                                    try {
-                                        String cleanJson = jsonStr.replaceAll("```json\\s*", "").replaceAll("```", "").trim();
-                                        List<DetectedObj> objs = objectMapper.readValue(cleanJson, new TypeReference<List<DetectedObj>>() {});
-                                        OCRResponse r = new OCRResponse();
-                                        r.setTag("objects");
-                                        r.setDetectedObjs(objs);
-                                        return r;
-                                    } catch (Exception e) {
-                                        log.error("Ошибка парсинга объектов", e);
-                                        OCRResponse err = new OCRResponse();
-                                        err.setTag("objects");
-                                        err.setResult("Ошибка разбора данных о объектах");
-                                        return err;
-                                    }
-                                });
-
-                        case "image" -> sendTolVllm(imageBytes, DESCRIPTION_PROMPT, 1024)
-                                .thenApply(res -> {
-                                    OCRResponse r = new OCRResponse();
-                                    r.setTag("image");
-                                    r.setDescription(res);
-                                    r.setResult(res);
-                                    return r;
-                                });
-
-                        default -> CompletableFuture.completedFuture(new OCRResponse());
-                    };
+        return sendTolVllm(imageBytes, CLASSIFIER_PROMPT, 32)
+                .thenComposeAsync(rawCategory -> {
+                    log.debug("[CLASSIFIER] Сырой ответ от классификатора: '{}'", rawCategory);
+                    String category = normalizeCategory(rawCategory);
+                    log.info("[CLASSIFIER] Итоговая категория: '{}'", category);
+                    return categoryRouter(imageBytes, category);
                 }, executor)
                 .exceptionally(ex -> {
-                    log.error("Ошибка в пайплайне", ex);
-                    OCRResponse errorRes = new OCRResponse();
-                    errorRes.setResult("Ошибка обработки: " + ex.getMessage());
-                    return errorRes;
+                    log.error("[PIPELINE-ERROR] Критическая ошибка на верхнем уровне пайплайна: {}", ex.getMessage(), ex);
+                    OCRResponse err = new OCRResponse();
+                    err.setResult("Ошибка обработки: " + ex.getMessage());
+                    return err;
+                });
+    }
+
+    private CompletableFuture<OCRResponse> categoryRouter(byte[] imageBytes, String category) {
+        log.info("[ROUTER] Направление потока в обработчик категории: {}", category);
+        return switch (category) {
+            case "math", "mixed" -> handleMath(imageBytes);
+            case "text" -> handleText(imageBytes);
+            case "food" -> handleFood(imageBytes);
+            case "objects" -> handleObjs(imageBytes);
+            case "image" -> handleImage(imageBytes);
+            case "noise" -> {
+                log.info("[ROUTER] Категория 'noise'. Прерываем пайплайн, возвращаем заглушку.");
+                OCRResponse response = new OCRResponse();
+                response.setTag("noise");
+                response.setResult("На изображении не обнаружен четкий объект для анализа. Попробуйте сфотографировать объект на однородном фоне");
+                yield CompletableFuture.completedFuture(response);
+            }
+            default -> {
+                log.warn("[ROUTER] Неизвестная категория '{}'. Фоллбэк на 'handleImage'.", category);
+                yield handleImage(imageBytes);
+            }
+        };
+    }
+
+    private CompletableFuture<OCRResponse> handleMath(byte[] imageBytes) {
+        log.info("[HANDLER-MATH] Старт обработки. Используем локальную модель vLLM.");
+        return sendTolVllm(imageBytes, MATH_PROMPT, 7102)
+                .thenApply(res -> {
+                    log.debug("[HANDLER-MATH] Сырой ответ от нейросети:\n{}", res);
+                    OCRResponse response = new OCRResponse();
+                    response.setTag("math");
+                    response.setResult(res);
+                    log.info("[HANDLER-MATH] Обработка успешно завершена.");
+                    return response;
+                });
+    }
+
+    private CompletableFuture<OCRResponse> handleText(byte[] imageBytes) {
+        log.info("[HANDLER-TEXT] Старт обработки текста.");
+        return sendTolVllm(imageBytes, OCR_PROMPT, 1024)
+                .thenApply(res -> {
+                    log.debug("[HANDLER-TEXT] Распознанный текст:\n{}", res);
+                    OCRResponse response = new OCRResponse();
+                    response.setTag("text");
+                    response.setResult(res);
+                    log.info("[HANDLER-TEXT] Обработка успешно завершена.");
+                    return response;
+                });
+    }
+
+    private CompletableFuture<OCRResponse> handleFood(byte[] imageBytes) {
+        log.info("[HANDLER-FOOD] Старт анализа КБЖУ.");
+        return sendTolVllm(imageBytes, FOOD_PROMPT, 512)
+                .thenApply(jsonStr -> {
+                    log.info("[HANDLER-FOOD] Получен сырой ответ от модели.");
+                    log.debug("[HANDLER-FOOD] Содержимое ответа:\n{}", jsonStr);
+                    try {
+                        String cleanJson = jsonStr.replaceAll("```json\\s*", "").replaceAll("```", "").trim();
+                        log.debug("[HANDLER-FOOD] Ответ после очистки регулярками:\n{}", cleanJson);
+
+                        OCRResponse response = objectMapper.readValue(cleanJson, OCRResponse.class);
+                        response.setTag("food");
+                        log.info("[HANDLER-FOOD] JSON успешно распаршен в объект. Калории: {}", response.getCalories());
+                        return response;
+                    } catch (Exception e) {
+                        log.error("[HANDLER-FOOD] Ошибка парсинга JSON еды. Сырая строка: {}", jsonStr, e);
+                        OCRResponse err = new OCRResponse();
+                        err.setTag("food");
+                        err.setResult("Ошибка разбора данных о еде");
+                        return err;
+                    }
+                });
+    }
+
+    private CompletableFuture<OCRResponse> handleObjs(byte[] imageBytes) {
+        log.info("[HANDLER-OBJS] Старт детекции объектов.");
+        return sendTolVllm(imageBytes, DETECT_PROMPT, 1024)
+                .thenApply(jsonStr -> {
+                    log.info("[HANDLER-OBJS] Получен сырой ответ от модели.");
+                    log.debug("[HANDLER-OBJS] Содержимое ответа:\n{}", jsonStr);
+                    try {
+                        String clear = stripJsonFences(jsonStr);
+                        log.debug("[HANDLER-OBJS] Строка после stripJsonFences:\n{}", clear);
+
+                        List<DetectedObj> raw = objectMapper.readValue(
+                                clear, new TypeReference<List<DetectedObj>>() {}
+                        );
+                        log.info("[HANDLER-OBJS] Распаршено {} объектов до фильтрации.", raw.size());
+
+                        List<DetectedObj> filtered = objectFilterService.filter(raw);
+                        log.info("[HANDLER-OBJS] После фильтрации осталось {} объектов.", filtered.size());
+
+                        OCRResponse response = new OCRResponse();
+                        response.setTag("objects");
+                        response.setDetectedObjs(filtered);
+
+                        if (!filtered.isEmpty()) {
+                            log.info("[HANDLER-OBJS] Запуск генерации ссылок на маркетплейсы для объекта: {}", filtered.get(0).getLabel());
+                            List<SearchResult> links = productSearchService.generateLinksForPrimaryObject(filtered);
+                            response.setMarketplaceLinks(links);
+                            log.info("[HANDLER-OBJS] Найдено {} ссылок.", links != null ? links.size() : 0);
+                        } else {
+                            log.info("[HANDLER-OBJS] Список отфильтрованных объектов пуст, поиск ссылок пропущен.");
+                        }
+
+                        return response;
+                    } catch (Exception e) {
+                        log.error("[HANDLER-OBJS] Ошибка парсинга массива объектов. Сырая строка: {}", jsonStr, e);
+                        OCRResponse err = new OCRResponse();
+                        err.setTag("objects");
+                        err.setResult("Не удалось разобрать список объектов");
+                        return err;
+                    }
+                });
+    }
+
+    private CompletableFuture<OCRResponse> handleImage(byte[] imageBytes) {
+        log.info("[HANDLER-IMAGE] Старт генерации описания изображения.");
+        return sendTolVllm(imageBytes, DESCRIPTION_PROMPT, 1024)
+                .thenApply(res -> {
+                    log.debug("[HANDLER-IMAGE] Сгенерированное описание:\n{}", res);
+                    OCRResponse response = new OCRResponse();
+                    response.setTag("image");
+                    response.setDescription(res);
+                    response.setResult(res);
+                    log.info("[HANDLER-IMAGE] Обработка успешно завершена.");
+                    return response;
                 });
     }
 
     private CompletableFuture<String> sendTolVllm(byte[] imageBytes, String prompt, int maxTokens) {
-        // Кодируем картинку в Base64, чтобы скинуть её в JSON для vLLM.
+        log.info("[vLLM-CLIENT] Подготовка запроса к локальной модели. Модель: {}, maxTokens: {}", localModel, maxTokens);
+        log.debug("[vLLM-CLIENT] Используемый промпт:\n{}", prompt);
+
         String base64Image = "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(imageBytes);
+        log.debug("[vLLM-CLIENT] Изображение конвертировано в Base64. Длина строки: {}", base64Image.length());
 
         Map<String, Object> requestBody = Map.of(
-                "model", "Qwen/Qwen2.5-VL-7B-Instruct-AWQ",
+                "model", localModel.trim(),
                 "messages", List.of(
                         Map.of("role", "user", "content", List.of(
                                 Map.of("type", "text", "text", prompt),
                                 Map.of("type", "image_url", "image_url", Map.of("url", base64Image))
                         ))
                 ),
-                "temperature", 0.01,
+                "temperature", localTemperature,
                 "max_tokens", maxTokens
         );
+
+        log.info("[vLLM-CLIENT] Отправка POST /v1/chat/completions на http://127.0.0.1:8000...");
+        long startTime = System.currentTimeMillis();
 
         return localWebClient.post()
                 .uri("/v1/chat/completions")
@@ -355,13 +398,22 @@ public class OCRService {
                 .bodyValue(requestBody)
                 .retrieve()
                 .bodyToMono(Map.class)
-                .map(this::extractContentFromResponse)
+                .map(response -> {
+                    long endTime = System.currentTimeMillis();
+                    log.info("[vLLM-CLIENT] Получен ответ от vLLM. Время выполнения запроса: {} мс", (endTime - startTime));
+                    log.debug("[vLLM-CLIENT] Сырой ответ (Map): {}", response);
+                    return extractContentFromResponse(response);
+                })
+                .doOnError(err -> log.error("[vLLM-CLIENT] Ошибка при запросе к локальной vLLM: {}", err.getMessage(), err))
                 .toFuture();
     }
 
     private CompletableFuture<String> callMathSolver(String problemText) {
+        log.info("[DEEPSEEK-CLIENT] Подготовка запроса к DeepSeek. Модель: {}", deepSeekModel);
+        log.debug("[DEEPSEEK-CLIENT] Задача для решения:\n{}", problemText);
+
         Map<String, Object> requestBody = Map.of(
-                "model", "deepseek-chat",
+                "model", deepSeekModel,
                 "messages", List.of(
                         Map.of("role", "user", "content", MATH_SOLVER_PROMPT + "\n\n" + problemText)
                 ),
@@ -369,24 +421,60 @@ public class OCRService {
                 "max_tokens", 4096
         );
 
+        long startTime = System.currentTimeMillis();
+
         return deepSeekWebClient.post()
                 .uri("/v1/chat/completions")
                 .contentType(MediaType.APPLICATION_JSON)
-                .header("Authorization", "Bearer sk-b1687517c01f47bdac606704de5fd311")
+                .header("Authorization", "Bearer " + deepSeekApiKey)
                 .bodyValue(requestBody)
                 .retrieve()
                 .bodyToMono(Map.class)
-                .map(this::extractContentFromResponse)
+                .map(response -> {
+                    long endTime = System.currentTimeMillis();
+                    log.info("[DEEPSEEK-CLIENT] Получен ответ от DeepSeek. Время: {} мс", (endTime - startTime));
+                    return extractContentFromResponse(response);
+                })
+                .doOnError(err -> log.error("[DEEPSEEK-CLIENT] Ошибка API DeepSeek: {}", err.getMessage(), err))
                 .toFuture();
+    }
+
+    private String stripJsonFences(String raw) {
+        log.debug("[UTILS] Вызов stripJsonFences. Исходная строка: {}", raw);
+        String cleaned = raw.replaceAll("(?s)<think>.*?</think>\\s*", "")
+                .replaceAll("(?s)```json\\s*", "")
+                .replaceAll("(?s)```\\s*", "")
+                .trim();
+        log.debug("[UTILS] stripJsonFences результат: {}", cleaned);
+        return cleaned;
+    }
+
+    private String normalizeCategory(String raw) {
+        log.debug("[UTILS] Вызов normalizeCategory. Исходная строка: '{}'", raw);
+        String clean = raw.toLowerCase().trim().replaceAll("[^a-z]", "");
+        if (clean.contains("math") || clean.contains("mixed")) return clean.contains("mixed") ? "mixed" : "math";
+        if (clean.contains("food") || clean.contains("meal")) return "food";
+        if (clean.contains("noise") || clean.contains("empty") || clean.contains("background")) return "noise";
+        if (clean.contains("object") || clean.contains("product")) return "objects";
+        if (clean.contains("text")) return "text";
+        if (clean.contains("image") || clean.contains("scene") || clean.contains("photo")) return "image";
+
+        log.debug("[UTILS] normalizeCategory не нашел четких совпадений, возвращаем: '{}'", clean);
+        return clean;
     }
 
     private String extractContentFromResponse(Map response) {
         try {
+            log.debug("[UTILS] Извлечение content из ответа...");
             List<Map<String, Object>> choices = (List<Map<String, Object>>) response.get("choices");
             Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
-            return ((String) message.get("content")).trim();
+            String content = (String) message.get("content");
+
+            String noThinkContent = content.replaceAll("(?s)<think>.*?</think>", "").trim();
+            log.debug("[UTILS] Извлеченный и очищенный от <think> текст длиной {} символов", noThinkContent.length());
+            return noThinkContent;
         } catch (Exception e) {
-            log.error("Ошибка парсинга ответа", e);
+            log.error("[UTILS] Ошибка парсинга Map ответа в extractContentFromResponse. Тело Map: {}", response, e);
             return "Ошибка при чтении ответа модели.";
         }
     }
