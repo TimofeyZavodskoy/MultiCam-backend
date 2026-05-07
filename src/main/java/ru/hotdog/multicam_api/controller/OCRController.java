@@ -21,12 +21,10 @@ public class OCRController {
 
     private final OCRService ocrService;
 
-    // Измени тип принимаемого файла с MultipartFile на FilePart
     @PostMapping(value = "/process", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public CompletableFuture<ResponseEntity<OCRResponse>> process(@RequestPart("image") org.springframework.http.codec.multipart.FilePart file) {
         log.info("Получен запрос на распознавание: {}, размер не определен напрямую", file.filename());
 
-        // Чтение байтов из FilePart (он реактивный)
         return file.content()
                 .map(dataBuffer -> {
                     byte[] bytes = new byte[dataBuffer.readableByteCount()];

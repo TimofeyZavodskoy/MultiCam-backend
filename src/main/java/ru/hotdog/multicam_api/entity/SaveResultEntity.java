@@ -1,4 +1,4 @@
-package ru.hotdog.multicam_api.entities;
+package ru.hotdog.multicam_api.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 @Entity
 @Data
 @Table(name = "saved_result")
-public class SaveResult {
+public class SaveResultEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

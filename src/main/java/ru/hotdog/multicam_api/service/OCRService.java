@@ -1,5 +1,6 @@
 package ru.hotdog.multicam_api.service;
 
+import jakarta.annotation.PreDestroy;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.core.type.TypeReference;
 import io.netty.channel.ChannelOption;
@@ -477,5 +478,9 @@ public class OCRService {
             log.error("[UTILS] Ошибка парсинга Map ответа в extractContentFromResponse. Тело Map: {}", response, e);
             return "Ошибка при чтении ответа модели.";
         }
+    }
+    @PreDestroy
+    public void shutdown() {
+        executor.shutdown();
     }
 }
