@@ -5,8 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.hotdog.multicam_api.dto.SaveRequest;
-import ru.hotdog.multicam_api.entities.SaveResult;
-import ru.hotdog.multicam_api.repositories.SaveResultRepo;
+import ru.hotdog.multicam_api.entity.SaveResultEntity;
+import ru.hotdog.multicam_api.repository.SaveResultRepo;
 import tools.jackson.databind.ObjectMapper;
 
 @RestController
@@ -20,7 +20,7 @@ public class SavedResult {
     @PostMapping("/like")
     public ResponseEntity<String> saveResult(@RequestBody SaveRequest request) {
         try {
-            SaveResult result = new SaveResult();
+            SaveResultEntity result = new SaveResultEntity();
             result.setImageUrl(request.getImageUrl());
             result.setCategory(request.getCategory());
 
