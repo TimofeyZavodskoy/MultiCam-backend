@@ -1,27 +1,30 @@
 package ru.hotdog.multicam_api.entity;
 
-import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
 import lombok.Data;
-
+import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 import java.time.LocalDateTime;
 
-@Entity
-@Data
 @Table(name = "users")
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
 public class UserEntity {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "name")
+    @Column()
     private String name;
 
-    @Column(name = "password")
+    @Column()
     private String password;
 
-    @Column(name = "email", unique = true)
+    @Column()
     private String email;
 
-    @Column(name = "created_at")
+    @Column()
     private LocalDateTime createdAt = LocalDateTime.now();
 }

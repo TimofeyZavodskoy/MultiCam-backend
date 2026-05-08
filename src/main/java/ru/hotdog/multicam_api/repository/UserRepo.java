@@ -1,14 +1,12 @@
 package ru.hotdog.multicam_api.repository;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.r2dbc.repository.R2dbcRepository;
 import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Mono;
 import ru.hotdog.multicam_api.entity.UserEntity;
 
-import java.util.Optional;
-
 @Repository
-public interface UserRepo extends JpaRepository<UserEntity, Long> {
-    Optional<UserEntity> findUserById(Long id);
-    Optional<UserEntity> findUserByEmail(String email);
-    boolean existsUserByEmail(String email);
+public interface UserRepo extends R2dbcRepository<UserEntity, Long> {
+    Mono<UserEntity> findByEmail(String email);
+    Mono<Boolean> existsByEmail(String email);
 }

@@ -1,47 +1,54 @@
 package ru.hotdog.multicam_api.security;
 
-import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
+import ru.hotdog.multicam_api.entity.UserEntity;
 import ru.hotdog.multicam_api.service.impl.UserDetailsImpl;
 
+import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
-import java.security.Key;
 import java.util.Date;
 
 @Component
 public class JwtConfig {
     @Value("${app.secret}")
     private String secret;
+
     @Value("${app.lifetime}")
     private int lifetime;
 
     public String generateToken(Authentication authentication) {
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        return generateTokenForUser(userDetails.getEmail(), userDetails.getId());
+    }
 
+    public String generateTokenForUser(String email, Long userId) {
         return Jwts.builder()
-                .subject(userDetails.getUsername()) // Вместо setSubject
-                .issuedAt(new Date())               // Вместо setIssuedAt
-                .expiration(new Date(System.currentTimeMillis() + lifetime)) // Вместо setExpiration
-                .signWith(getSigninKey())           // Алгоритм определится автоматически по ключу
+                .subject(email)
+                .claim("userId", userId)
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + lifetime))
+                .signWith(getSigningKey())
                 .compact();
+    }
+
+    public String generateTokenForUser(UserEntity user) {
+        return generateTokenForUser(user.getEmail(), user.getId());
     }
 
     public String getUsernameFromToken(String token) {
         return Jwts.parser()
-                .verifyWith(getSigninKey())         // Вместо setSigningKey
+                .verifyWith(getSigningKey())
                 .build()
-                .parseSignedClaims(token)           // Вместо parseClaimsJws
-                .getPayload()                       // Вместо getBody
+                .parseSignedClaims(token)
+                .getPayload()
                 .getSubject();
     }
 
-    private javax.crypto.SecretKey getSigninKey() {
-        // В 0.12.x Keys.hmacShaKeyFor возвращает SecretKey
+    private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 }
