@@ -1,28 +1,26 @@
 package ru.hotdog.multicam_api.entity;
 
-import jakarta.persistence.*;
 import lombok.Data;
-
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 import java.time.LocalDateTime;
 
-@Entity
-@Data
 @Table(name = "saved_result")
+@Data
 public class SaveResultEntity {
-
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "imageUrl")
+    @Column()
     private String imageUrl;
 
-    @Column(name = "jsonData", columnDefinition = "TEXT")
+    @Column()
     private String jsonData;
 
-    @Column(name = "category")
+    @Column()
     private String category;
 
-    @Column(name = "created_at")
+    @Column()
     private LocalDateTime createdAt = LocalDateTime.now();
 }

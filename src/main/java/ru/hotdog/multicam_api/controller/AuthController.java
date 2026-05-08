@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
 import ru.hotdog.multicam_api.dto.Signin;
 import ru.hotdog.multicam_api.dto.Signup;
 import ru.hotdog.multicam_api.service.AuthService;
@@ -18,14 +19,16 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/signup/save")
-    public ResponseEntity<?> signup(@Valid @RequestBody Signup signupRequest) {
-        authService.registerUser(signupRequest);
-        return ResponseEntity.ok("Signup successful");
+    public Mono<ResponseEntity<String>> signup(@Valid @RequestBody Signup signupRequest) {
+        return authService.registerUser(signupRequest)
+                .map(ResponseEntity::ok)
+                .onErrorResume(ex -> Mono.just(ResponseEntity.badRequest().body(ex.getMessage())));
     }
 
     @PostMapping("/signin")
-    public ResponseEntity<?> signin(@Valid @RequestBody Signin signinRequest) {
-        String jwt = authService.authUser(signinRequest);
-        return ResponseEntity.ok(jwt);
+    public Mono<ResponseEntity<String>> signin(@Valid @RequestBody Signin signinRequest) {
+        return authService.authUser(signinRequest)
+                .map(ResponseEntity::ok)
+                .onErrorResume(ex -> Mono.just(ResponseEntity.badRequest().body(ex.getMessage())));
     }
 }

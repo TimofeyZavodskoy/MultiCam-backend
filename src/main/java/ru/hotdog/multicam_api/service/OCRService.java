@@ -1,17 +1,18 @@
 package ru.hotdog.multicam_api.service;
 
-import jakarta.annotation.PreDestroy;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import io.netty.channel.ChannelOption;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
+import reactor.util.retry.Retry;
 import ru.hotdog.multicam_api.dto.DetectedObj;
 import ru.hotdog.multicam_api.dto.OCRResponse;
 import ru.hotdog.multicam_api.dto.SearchResult;
@@ -20,15 +21,11 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
 public class OCRService {
-
     private static final String SYSTEM_PROMPT = """
             You are a precise visual analysis engine. Obey these rules without exception:
             1. ACCURACY FIRST: Only report what you can see with certainty. If unsure — omit, never guess.
@@ -92,7 +89,7 @@ public class OCRService {
 
     private static final String FOOD_PROMPT = """
             Act as a nutritionist. Analyze food image.
-            Return ONLY JSON: {"mass": int, "calories": int, "proteins": int, "fats": int, "carbs": int}.
+            Return ONLY JSON: { "mass": int, "calories": int, "proteins": int, "fats": int, "carbs": int}.
             No markdown.
             """;
 
@@ -113,64 +110,63 @@ public class OCRService {
             - If no meaningful objects found: return []
             """;
 
-    private static final String MATH_PROMPT =
-            """
-                    You are a strict Academic Tutor specializing in Mathematics (Algebra, Calculus, Trig) and Physics.
-                      Your goal is 100% accuracy. You must assume the user is a student who needs to see EVERY intermediate step.
-                    
-                      ═══════════════════════════════════════════
-                      GLOBAL CONSTRAINTS
-                      ═══════════════════════════════════════════
-                      1. LANGUAGE: Output must be entirely in RUSSIAN.
-                      2. NOTATION: Use Soviet notation: 'tg' for tangent, 'ctg' for cotangent. NEVER use 'tan' or 'cot'.
-                      3. ATOMIC STEPS: Perform only ONE logical or algebraic operation per step. Do not combine simplification and substitution in one line.
-                      4. VERBOSITY: Do not summarize. Show full intermediate expressions.
-                         - BAD: "Simplify to get x=5"
-                         - GOOD: Show the equation, then show the simplified equation, then the result.
-                    
-                      ═══════════════════════════════════════════
-                      REASONING PROTOCOL (INTERNAL)
-                      ═══════════════════════════════════════════
-                      Before generating the final LaTeX math block for any step, you must mentally verify:
-                      - Are signs (+/-) correct?
-                      - Did I miss a coefficient (like 1/3 or sqrt(3))?
-                      - Is the domain (ОДЗ) respected?
-                    
-                      ═══════════════════════════════════════════
-                      OUTPUT STRUCTURE
-                      ═══════════════════════════════════════════
-                      Follow this exact Markdown structure:
-                    
-                      ### Анализ задачи
-                      Briefly describe what is given and what is needed. If there is an image, describe the visible graph/formula text.
-                    
-                      ### ОДЗ (Domain)
-                      Determine the valid domain for x. If none, write "ОДЗ: x ∈ R".
-                    
-                      ### План решения
-                      List the strategy (e.g., "1. Group terms. 2. Use Pythagorean identity. 3. Solve quadratic.").
-                    
-                      ### Решение
-                      Execute the plan step-by-step.
-                      Format for each step:
-                      **Шаг N:** [Name of operation]
-                      [Explanation in Russian]
-                      $$ [LaTeX Math Block] $$
-                    
-                      ### Проверка
-                      Substitute the result back into the original expression to verify correctness.
-                    
-                      ### Ответ
-                      Final answer clearly stated.
-                      $$ \\boxed{ [Answer] } $$
-                    
-                      ═══════════════════════════════════════════
-                      CRITICAL REMINDERS
-                      ═══════════════════════════════════════════
-                      - For Trig: $\\sin^2 x + \\cos^2 x = 1$.
-                      - For Physics: Show formula -> Show substitution with units -> Show result.
-                      - Never skip the "Plan" section. It grounds your logic.
-                    """;
+    private static final String MATH_PROMPT = """
+                You are a strict Academic Tutor specializing in Mathematics (Algebra, Calculus, Trig) and Physics.
+                  Your goal is 100% accuracy. You must assume the user is a student who needs to see EVERY intermediate step.
+                
+                  ═══════════════════════════════════════════
+                  GLOBAL CONSTRAINTS
+                  ═══════════════════════════════════════════
+                  1. LANGUAGE: Output must be entirely in RUSSIAN.
+                  2. NOTATION: Use Soviet notation: 'tg' for tangent, 'ctg' for cotangent. NEVER use 'tan' or 'cot'.
+                  3. ATOMIC STEPS: Perform only ONE logical or algebraic operation per step. Do not combine simplification and substitution in one line.
+                  4. VERBOSITY: Do not summarize. Show full intermediate expressions.
+                     - BAD: "Simplify to get x=5"
+                     - GOOD: Show the equation, then show the simplified equation, then the result.
+                
+                  ═══════════════════════════════════════════ 
+                  REASONING PROTOCOL (INTERNAL)
+                  ═══════════════════════════════════════════
+                  Before generating the final LaTeX math block for any step, you must mentally verify:
+                  - Are signs (+/-) correct?
+                  - Did I miss a coefficient (like 1/3 or sqrt(3))?
+                  - Is the domain (ОДЗ) respected?
+                
+                  ═══════════════════════════════════════════
+                  OUTPUT STRUCTURE
+                  ═══════════════════════════════════════════
+                  Follow this exact Markdown structure:
+                
+                  ### Анализ задачи
+                  Briefly describe what is given and what is needed. If there is an image, describe the visible graph/formula text.
+                
+                  ### ОДЗ (Domain)
+                  Determine the valid domain for x. If none, write "ОДЗ: x ∈ R".
+                
+                  ### План решения
+                  List the strategy (e.g., "1. Group terms. 2. Use Pythagorean identity. 3. Solve quadratic.").
+                
+                  ### Решение
+                  Execute the plan step-by-step.
+                  Format for each step:
+                  **Шаг N:** [Name of operation]
+                  [Explanation in Russian]
+                  $$ [LaTeX Math Block] $$
+                
+                  ### Проверка
+                  Substitute the result back into the original expression to verify correctness.
+                
+                  ### Ответ
+                  Final answer clearly stated.
+                  $$ \\boxed{[Answer]} $$
+                
+                  ═══════════════════════════════════════════
+                  CRITICAL REMINDERS
+                  ═══════════════════════════════════════════
+                  - For Trig: $\\sin^2 x + \\cos^2 x = 1$.
+                  - For Physics: Show formula -> Show substitution with units -> Show result.
+                  - Never skip the "Plan" section. It grounds your logic.
+                 """;
 
     @Value("${deepseek.api.key:}")
     private String deepSeekApiKey;
@@ -187,7 +183,6 @@ public class OCRService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final WebClient localWebClient;
     private final WebClient deepSeekWebClient;
-    private final ExecutorService executor = Executors.newFixedThreadPool(10);
     private final ObjectFilterService objectFilterService;
     private final ProductSearchService productSearchService;
 
@@ -225,25 +220,21 @@ public class OCRService {
         this.productSearchService = productSearchService;
     }
 
-    public CompletableFuture<OCRResponse> processRequest(byte[] imageBytes) {
+    public Mono<OCRResponse> processRequest(byte[] imageBytes) {
         log.info("[PIPELINE-START] Получен запрос на обработку. Размер изображения: {} байт", imageBytes.length);
 
-        return sendTolVllm(imageBytes, CLASSIFIER_PROMPT, 32)
-                .thenComposeAsync(rawCategory -> {
-                    log.debug("[CLASSIFIER] Сырой ответ от классификатора: '{}'", rawCategory);
-                    String category = normalizeCategory(rawCategory);
-                    log.info("[CLASSIFIER] Итоговая категория: '{}'", category);
-                    return categoryRouter(imageBytes, category);
-                }, executor)
-                .exceptionally(ex -> {
+        return sendToVllm(imageBytes, CLASSIFIER_PROMPT, 32)
+                .map(this::normalizeCategory)
+                .flatMap(category -> categoryRouter(imageBytes, category))
+                .onErrorResume(ex -> {
                     log.error("[PIPELINE-ERROR] Критическая ошибка на верхнем уровне пайплайна: {}", ex.getMessage(), ex);
                     OCRResponse err = new OCRResponse();
                     err.setResult("Ошибка обработки: " + ex.getMessage());
-                    return err;
+                    return Mono.just(err);
                 });
     }
 
-    private CompletableFuture<OCRResponse> categoryRouter(byte[] imageBytes, String category) {
+    private Mono<OCRResponse> categoryRouter(byte[] imageBytes, String category) {
         log.info("[ROUTER] Направление потока в обработчик категории: {}", category);
         return switch (category) {
             case "math", "mixed" -> handleMath(imageBytes);
@@ -256,7 +247,7 @@ public class OCRService {
                 OCRResponse response = new OCRResponse();
                 response.setTag("noise");
                 response.setResult("На изображении не обнаружен четкий объект для анализа. Попробуйте сфотографировать объект на однородном фоне");
-                yield CompletableFuture.completedFuture(response);
+                yield Mono.just(response);
             }
             default -> {
                 log.warn("[ROUTER] Неизвестная категория '{}'. Фоллбэк на 'handleImage'.", category);
@@ -265,10 +256,10 @@ public class OCRService {
         };
     }
 
-    private CompletableFuture<OCRResponse> handleMath(byte[] imageBytes) {
+    private Mono<OCRResponse> handleMath(byte[] imageBytes) {
         log.info("[HANDLER-MATH] Старт обработки. Используем локальную модель vLLM.");
-        return sendTolVllm(imageBytes, MATH_PROMPT, 7102)
-                .thenApply(res -> {
+        return sendToVllm(imageBytes, MATH_PROMPT, 7102)
+                .map(res -> {
                     log.debug("[HANDLER-MATH] Сырой ответ от нейросети:\n{}", res);
                     OCRResponse response = new OCRResponse();
                     response.setTag("math");
@@ -278,10 +269,10 @@ public class OCRService {
                 });
     }
 
-    private CompletableFuture<OCRResponse> handleText(byte[] imageBytes) {
+    private Mono<OCRResponse> handleText(byte[] imageBytes) {
         log.info("[HANDLER-TEXT] Старт обработки текста.");
-        return sendTolVllm(imageBytes, OCR_PROMPT, 1024)
-                .thenApply(res -> {
+        return sendToVllm(imageBytes, OCR_PROMPT, 1024)
+                .map(res -> {
                     log.debug("[HANDLER-TEXT] Распознанный текст:\n{}", res);
                     OCRResponse response = new OCRResponse();
                     response.setTag("text");
@@ -291,14 +282,14 @@ public class OCRService {
                 });
     }
 
-    private CompletableFuture<OCRResponse> handleFood(byte[] imageBytes) {
+    private Mono<OCRResponse> handleFood(byte[] imageBytes) {
         log.info("[HANDLER-FOOD] Старт анализа КБЖУ.");
-        return sendTolVllm(imageBytes, FOOD_PROMPT, 512)
-                .thenApply(jsonStr -> {
+        return sendToVllm(imageBytes, FOOD_PROMPT, 512)
+                .map(jsonStr -> {
                     log.info("[HANDLER-FOOD] Получен сырой ответ от модели.");
                     log.debug("[HANDLER-FOOD] Содержимое ответа:\n{}", jsonStr);
                     try {
-                        String cleanJson = jsonStr.replaceAll("```json\\s*", "").replaceAll("```", "").trim();
+                        String cleanJson = jsonStr.replaceAll("```json\\s*", " ").replaceAll("```", " ").trim();
                         log.debug("[HANDLER-FOOD] Ответ после очистки регулярками:\n{}", cleanJson);
 
                         OCRResponse response = objectMapper.readValue(cleanJson, OCRResponse.class);
@@ -315,10 +306,10 @@ public class OCRService {
                 });
     }
 
-    private CompletableFuture<OCRResponse> handleObjs(byte[] imageBytes) {
+    private Mono<OCRResponse> handleObjs(byte[] imageBytes) {
         log.info("[HANDLER-OBJS] Старт детекции объектов.");
-        return sendTolVllm(imageBytes, DETECT_PROMPT, 1024)
-                .thenApply(jsonStr -> {
+        return sendToVllm(imageBytes, DETECT_PROMPT, 1024)
+                .map(jsonStr -> {
                     log.info("[HANDLER-OBJS] Получен сырой ответ от модели.");
                     log.debug("[HANDLER-OBJS] Содержимое ответа:\n{}", jsonStr);
                     try {
@@ -357,10 +348,10 @@ public class OCRService {
                 });
     }
 
-    private CompletableFuture<OCRResponse> handleImage(byte[] imageBytes) {
+    private Mono<OCRResponse> handleImage(byte[] imageBytes) {
         log.info("[HANDLER-IMAGE] Старт генерации описания изображения.");
-        return sendTolVllm(imageBytes, DESCRIPTION_PROMPT, 1024)
-                .thenApply(res -> {
+        return sendToVllm(imageBytes, DESCRIPTION_PROMPT, 1024)
+                .map(res -> {
                     log.debug("[HANDLER-IMAGE] Сгенерированное описание:\n{}", res);
                     OCRResponse response = new OCRResponse();
                     response.setTag("image");
@@ -371,7 +362,7 @@ public class OCRService {
                 });
     }
 
-    private CompletableFuture<String> sendTolVllm(byte[] imageBytes, String prompt, int maxTokens) {
+    private Mono<String> sendToVllm(byte[] imageBytes, String prompt, int maxTokens) {
         log.info("[vLLM-CLIENT] Подготовка запроса к локальной модели. Модель: {}, maxTokens: {}", localModel, maxTokens);
         log.debug("[vLLM-CLIENT] Используемый промпт:\n{}", prompt);
 
@@ -406,10 +397,11 @@ public class OCRService {
                     return extractContentFromResponse(response);
                 })
                 .doOnError(err -> log.error("[vLLM-CLIENT] Ошибка при запросе к локальной vLLM: {}", err.getMessage(), err))
-                .toFuture();
+                .retryWhen(Retry.fixedDelay(2, Duration.ofSeconds(2))
+                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()));
     }
 
-    private CompletableFuture<String> callMathSolver(String problemText) {
+    private Mono<String> callMathSolver(String problemText) {
         log.info("[DEEPSEEK-CLIENT] Подготовка запроса к DeepSeek. Модель: {}", deepSeekModel);
         log.debug("[DEEPSEEK-CLIENT] Задача для решения:\n{}", problemText);
 
@@ -436,15 +428,14 @@ public class OCRService {
                     log.info("[DEEPSEEK-CLIENT] Получен ответ от DeepSeek. Время: {} мс", (endTime - startTime));
                     return extractContentFromResponse(response);
                 })
-                .doOnError(err -> log.error("[DEEPSEEK-CLIENT] Ошибка API DeepSeek: {}", err.getMessage(), err))
-                .toFuture();
+                .doOnError(err -> log.error("[DEEPSEEK-CLIENT] Ошибка API DeepSeek: {}", err.getMessage(), err));
     }
 
     private String stripJsonFences(String raw) {
         log.debug("[UTILS] Вызов stripJsonFences. Исходная строка: {}", raw);
-        String cleaned = raw.replaceAll("(?s)<think>.*?</think>\\s*", "")
-                .replaceAll("(?s)```json\\s*", "")
-                .replaceAll("(?s)```\\s*", "")
+        String cleaned = raw.replaceAll("(?s)<think>.*?</think>\\s*", " ")
+                .replaceAll("(?s)```json\\s*", " ")
+                .replaceAll("(?s)```\\s*", " ")
                 .trim();
         log.debug("[UTILS] stripJsonFences результат: {}", cleaned);
         return cleaned;
@@ -452,7 +443,7 @@ public class OCRService {
 
     private String normalizeCategory(String raw) {
         log.debug("[UTILS] Вызов normalizeCategory. Исходная строка: '{}'", raw);
-        String clean = raw.toLowerCase().trim().replaceAll("[^a-z]", "");
+        String clean = raw.toLowerCase().trim().replaceAll("[^a-z]", " ");
         if (clean.contains("math") || clean.contains("mixed")) return clean.contains("mixed") ? "mixed" : "math";
         if (clean.contains("food") || clean.contains("meal")) return "food";
         if (clean.contains("noise") || clean.contains("empty") || clean.contains("background")) return "noise";
@@ -464,23 +455,19 @@ public class OCRService {
         return clean;
     }
 
-    private String extractContentFromResponse(Map response) {
+    private String extractContentFromResponse(Map<String, Object> response) {
         try {
             log.debug("[UTILS] Извлечение content из ответа...");
             List<Map<String, Object>> choices = (List<Map<String, Object>>) response.get("choices");
             Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
             String content = (String) message.get("content");
 
-            String noThinkContent = content.replaceAll("(?s)<think>.*?</think>", "").trim();
+            String noThinkContent = content.replaceAll("(?s)<think>.*?</think>", " ").trim();
             log.debug("[UTILS] Извлеченный и очищенный от <think> текст длиной {} символов", noThinkContent.length());
             return noThinkContent;
         } catch (Exception e) {
             log.error("[UTILS] Ошибка парсинга Map ответа в extractContentFromResponse. Тело Map: {}", response, e);
             return "Ошибка при чтении ответа модели.";
         }
-    }
-    @PreDestroy
-    public void shutdown() {
-        executor.shutdown();
     }
 }
