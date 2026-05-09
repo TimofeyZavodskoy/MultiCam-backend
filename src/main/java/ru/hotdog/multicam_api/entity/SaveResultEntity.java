@@ -12,15 +12,18 @@ public class SaveResultEntity {
     @Id
     private Long id;
 
-    @Column()
+    @Column("image_url")
     private String imageUrl;
 
-    @Column()
+    @Column("json_data")
     private String jsonData;
 
-    @Column()
+    @Column("category")
     private String category;
 
-    @Column()
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @Column("user_id")
+    private Long userId;
+
+    @Column("created_at")
+    private LocalDateTime createdAt;
 }
