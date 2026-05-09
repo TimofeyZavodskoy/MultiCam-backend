@@ -16,15 +16,18 @@ public class UserEntity {
     @Id
     private Long id;
 
-    @Column()
+    @Column("username")
     private String name;
 
-    @Column()
+    @Column("hashed_password")
     private String password;
 
-    @Column()
+    @Column("email")
     private String email;
 
-    @Column()
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @Column("is_guest")
+    private boolean isGuest;
+
+    @Column("created_at")
+    private LocalDateTime createdAt;
 }
