@@ -47,7 +47,7 @@ public class AuthController {
         String guestEmail = principal.getName();
 
         return userService.upgradeGuest(guestEmail, request.getEmail(), request.getPassword(), request.getName())
-                .flatMap(authService::loginAfterUpgrade) 
+                .flatMap(authService::loginAfterUpgrade)
                 .map(ResponseEntity::ok)
                 .onErrorResume(e -> Mono.just(ResponseEntity.status(400).body(Map.of("error", e.getMessage()).toString())));
     }
