@@ -2,10 +2,13 @@ package ru.hotdog.multicam_api.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import reactor.core.publisher.Mono;
 import ru.hotdog.multicam_api.dto.OCRResponse;
 import ru.hotdog.multicam_api.service.OCRService;
 
@@ -22,29 +25,23 @@ public class OCRController {
     private final OCRService ocrService;
 
     @PostMapping(value = "/process", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public CompletableFuture<ResponseEntity<OCRResponse>> process(@RequestPart("image") org.springframework.http.codec.multipart.FilePart file) {
-        log.info("Получен запрос на распознавание: {}, размер не определен напрямую", file.filename());
-
+    public Mono<ResponseEntity<OCRResponse>> process(@RequestPart("image") FilePart file) {
         return file.content()
                 .map(dataBuffer -> {
                     byte[] bytes = new byte[dataBuffer.readableByteCount()];
                     dataBuffer.read(bytes);
-                    org.springframework.core.io.buffer.DataBufferUtils.release(dataBuffer);
+                    DataBufferUtils.release(dataBuffer);
                     return bytes;
                 })
                 .collectList()
                 .map(list -> {
-                    int totalSize = list.stream().mapToInt(b -> b.length).sum();
-                    byte[] allBytes = new byte[totalSize];
+                    int total = list.stream().mapToInt(b -> b.length).sum();
+                    byte[] all = new byte[total];
                     int offset = 0;
-                    for (byte[] b : list) {
-                        System.arraycopy(b, 0, allBytes, offset, b.length);
-                        offset += b.length;
-                    }
-                    return allBytes;
+                    for (byte[] b : list) { System.arraycopy(b, 0, all, offset, b.length); offset += b.length; }
+                    return all;
                 })
-                .toFuture()
-                .thenCompose(imageBytes -> ocrService.processRequest(imageBytes))
-                .thenApply(ResponseEntity::ok);
+                .flatMap(ocrService::processRequest)
+                .map(ResponseEntity::ok);
     }
 }
