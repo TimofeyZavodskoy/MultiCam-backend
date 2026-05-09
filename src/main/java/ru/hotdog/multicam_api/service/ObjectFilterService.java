@@ -10,9 +10,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * Постфильтрация результатов детекции объектов.
- */
 @Service
 @Slf4j
 public class ObjectFilterService {
