@@ -7,7 +7,7 @@ import lombok.Data;
 @Data
 public class Signup {
     @NotEmpty
-    private String username;
+    private String name;
     @NotEmpty(message = "password couldn't be empty")
     private String password;
     @Email
