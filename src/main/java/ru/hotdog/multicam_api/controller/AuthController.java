@@ -58,6 +58,4 @@ public class AuthController {
                 .map(ResponseEntity::ok)
                 .onErrorResume(ex -> Mono.just(ResponseEntity.badRequest().body(ex.getMessage())));
     }
-
-
 }

@@ -21,17 +21,33 @@ public class SavedResult {
     private final UserService userService;
 
     @PostMapping("/like")
-    public Mono<ResponseEntity<String>> saveResult(@RequestBody SaveRequest request, Principal principal) {
+    public Mono<ResponseEntity<SaveResultEntity>> saveResult(
+            @RequestBody SaveRequest request,
+            Principal principal
+    ) {
         return userService.saveResult(request, principal.getName())
-                .map(saved -> ResponseEntity.ok("Успешно сохранено!"))
+                .map(saved -> ResponseEntity.ok(saved))
                 .onErrorResume(e -> {
                     log.error("Save error", e);
-                    return Mono.just(ResponseEntity.status(500).body("Ошибка: " + e.getMessage()));
+                    return Mono.just(ResponseEntity.status(500).build());
+                });
+    }
+
+    @DeleteMapping("/like/{id}")
+    public Mono<ResponseEntity<String>> deleteLike(
+            @PathVariable Long id,
+            Principal principal
+    ) {
+        return userService.deleteLike(id, principal.getName())
+                .then(Mono.just(ResponseEntity.ok("Удалено")))
+                .onErrorResume(e -> {
+                    log.error("Delete like error: id={}, user={}", id, principal.getName(), e);
+                    return Mono.just(ResponseEntity.status(403).body(e.getMessage()));
                 });
     }
 
     @GetMapping("/likes/all")
-     public Flux<SaveResultEntity> getAllLikes(Principal principal) {
+    public Flux<SaveResultEntity> getAllLikes(Principal principal) {
         return userService.getLikes(principal.getName());
     }
 }
