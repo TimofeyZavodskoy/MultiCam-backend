@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 import reactor.util.retry.Retry;
@@ -52,24 +53,18 @@ public class OCRService {
             """;
 
     private static final String EXTRACT_PROMPT = """
-        You are a precise OCR assistant.
-        Transcribe the mathematical problem from the image into LaTeX format exactly.
-        - Use tg, ctg notation (Soviet style).
-        - Do NOT solve. Just transcribe.
-        - IMPORTANT: You must wrap all your reasoning and thoughts inside <think>...</think> tags.
-        - After the </think> tag, output ONLY the LaTeX code. Nothing else.
-        """;
-
-    private static final String MATH_SOLVER_PROMPT = """
-            You are a strict Mathematics Professor. Solve the following problem step-by-step.
-            RULES:
-            1. OUTPUT LANGUAGE: Russian.
-            2. NOTATION: Use tg/ctg (Soviet style).
-            3. Show every step clearly.
-            4. Check ODZ (domain).
-            5. Final answer in \\boxed{}.
+            You are a precise mathematical OCR assistant specializing in handwritten formulas.
+            Transcribe the mathematical problem from the image into LaTeX format exactly.
             
-            PROBLEM TO SOLVE:
+            CRITICAL RULES:
+            1. Look extremely closely at handwritten letters: "tg" represents the tangent function, "ctg" represents cotangent. Do NOT split them into separate variables like 't', 'g', 'y', or 'x'.
+            2. Double-check all inequality signs (<=, >=, <, >) and exponents to ensure they match the image exactly.
+            3. Use Soviet style notation: \\operatorname{tg} and \\operatorname{ctg}.
+            4. Do NOT solve the problem. Just transcribe.
+            
+            FORMAT REQUIREMENT:
+            - You must wrap all your reasoning, visual analysis, and character double-checking inside <think>...</think> tags.
+            - After the </think> tag, output ONLY the LaTeX code. No Markdown code blocks (```), no conversational filler.
             """;
 
     private static final String OCR_PROMPT = """
@@ -174,10 +169,10 @@ public class OCRService {
     @Value("${deepseek.api.model:deepseek-chat}")
     private String deepSeekModel;
 
-    @Value("${llm.local.model:Qwen/Qwen2.5-VL-7B-Instruct-AWQ}")
+    @Value("${llm.api.model}")
     private String localModel;
 
-    @Value("${llm.local.temperature:0.01}")
+    @Value("${llm.api.temperature}")
     private double localTemperature;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -186,11 +181,50 @@ public class OCRService {
     private final ObjectFilterService objectFilterService;
     private final ProductSearchService productSearchService;
 
+//    public OCRService(WebClient.Builder webClientBuilder,
+//                      ObjectFilterService objectFilterService,
+//                      ProductSearchService productSearchService) {
+//
+//        log.info("[INIT] Инициализация OCRService...");
+//
+//        HttpClient localHttpClient = HttpClient.create()
+//                .noProxy()
+//                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 100000)
+//                .responseTimeout(Duration.ofSeconds(1800))
+//                .doOnConnected(conn -> conn
+//                        .addHandlerLast(new ReadTimeoutHandler(1800, TimeUnit.SECONDS))
+//                        .addHandlerLast(new WriteTimeoutHandler(1800, TimeUnit.SECONDS)));
+//
+//        this.localWebClient = webClientBuilder
+//                .baseUrl(modelBaseUrl)
+//                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(localHttpClient))
+//                .build();
+//        log.info("[INIT] Local WebClient настроен на {} с таймаутом 1800 сек.", modelBaseUrl);
+//
+//        HttpClient deepSeekHttpClient = HttpClient.create()
+//                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
+//                .responseTimeout(Duration.ofSeconds(120));
+//
+//        this.deepSeekWebClient = webClientBuilder
+//                .baseUrl(deepSeekBaseUrl)
+//                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(deepSeekHttpClient))
+//                .build();
+//        log.info("[INIT] DeepSeek WebClient настроен.");
+//
+//        this.objectFilterService = objectFilterService;
+//        this.productSearchService = productSearchService;
+//    }
+
     public OCRService(WebClient.Builder webClientBuilder,
                       ObjectFilterService objectFilterService,
-                      ProductSearchService productSearchService) {
+                      ProductSearchService productSearchService,
+                      @Value("${llm.api.base-url}") String modelBaseUrl,
+                      @Value("${deepseek.api.base-url}") String deepSeekBaseUrl) {
 
-        log.info("[INIT] Инициализация OCRService...");
+        this.objectFilterService = objectFilterService;
+        this.productSearchService = productSearchService;
+
+        log.info("[INIT] Инициализация OCRService с URL: {}", modelBaseUrl);
 
         HttpClient localHttpClient = HttpClient.create()
                 .noProxy()
@@ -200,24 +234,19 @@ public class OCRService {
                         .addHandlerLast(new ReadTimeoutHandler(1800, TimeUnit.SECONDS))
                         .addHandlerLast(new WriteTimeoutHandler(1800, TimeUnit.SECONDS)));
 
-        this.localWebClient = webClientBuilder
-                .baseUrl("http://127.0.0.1:8000")
+        this.localWebClient = webClientBuilder.clone()
+                .baseUrl(modelBaseUrl)
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(localHttpClient))
                 .build();
-        log.info("[INIT] Local WebClient настроен на http://127.0.0.1:8000 с таймаутом 1800 сек.");
 
         HttpClient deepSeekHttpClient = HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                 .responseTimeout(Duration.ofSeconds(120));
 
-        this.deepSeekWebClient = webClientBuilder
-                .baseUrl("https://api.deepseek.com")
+        this.deepSeekWebClient = webClientBuilder.clone()
+                .baseUrl(deepSeekBaseUrl)
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(deepSeekHttpClient))
                 .build();
-        log.info("[INIT] DeepSeek WebClient настроен.");
-
-        this.objectFilterService = objectFilterService;
-        this.productSearchService = productSearchService;
     }
 
     public Mono<OCRResponse> processRequest(byte[] imageBytes) {
@@ -257,14 +286,20 @@ public class OCRService {
     }
 
     private Mono<OCRResponse> handleMath(byte[] imageBytes) {
-        log.info("[HANDLER-MATH] Старт обработки. Используем локальную модель vLLM.");
-        return sendToVllm(imageBytes, MATH_PROMPT, 7102)
-                .map(res -> {
-                    log.debug("[HANDLER-MATH] Сырой ответ от нейросети:\n{}", res);
+        log.info("[HANDLER-MATH] Старт обработки. Шаг 1: Извлекаем текст из изображения.");
+        return handleMathOCR(imageBytes)
+                .flatMap(textResponse -> {
+                    String extractedText = textResponse.getResult();
+                    log.info("[HANDLER-MATH] Шаг 2: Текст успешно извлечен. Используем deepseek-v3.1...");
+                    log.debug("[HANDLER-MATH] Извлеченный текст:\n{}", extractedText);
+
+                    return mathSolver(extractedText);
+                })
+                .map(solvedResult -> {
                     OCRResponse response = new OCRResponse();
                     response.setTag("math");
-                    response.setResult(res);
-                    log.info("[HANDLER-MATH] Обработка успешно завершена.");
+                    response.setResult(solvedResult);
+                    log.info("[HANDLER-MATH] Обработка математики успешно завершена.");
                     return response;
                 });
     }
@@ -278,6 +313,19 @@ public class OCRService {
                     response.setTag("text");
                     response.setResult(res);
                     log.info("[HANDLER-TEXT] Обработка успешно завершена.");
+                    return response;
+                });
+    }
+
+    private Mono<OCRResponse> handleMathOCR(byte[] imageBytes) {
+        log.info("[MATH-OCR] Старт обработки математического текста");
+        return sendToVllm(imageBytes, EXTRACT_PROMPT, 2048)
+                .map(res -> {
+                    log.debug("[MATH-OCR] Распознанная формула:\n{}", res);
+                    OCRResponse response = new OCRResponse();
+                    response.setTag("null");
+                    response.setResult(res);
+                    log.info("[MATH-OCR] Обработка успешно завершена.");
                     return response;
                 });
     }
@@ -363,11 +411,11 @@ public class OCRService {
     }
 
     private Mono<String> sendToVllm(byte[] imageBytes, String prompt, int maxTokens) {
-        log.info("[vLLM-CLIENT] Подготовка запроса к локальной модели. Модель: {}, maxTokens: {}", localModel, maxTokens);
-        log.debug("[vLLM-CLIENT] Используемый промпт:\n{}", prompt);
+        log.info("[gpt-5.4-nano] Подготовка запроса к модели. Модель: {}, maxTokens: {}", localModel, maxTokens);
+        log.debug("[gpt-5.4-nano] Используемый промпт:\n{}", prompt);
 
         String base64Image = "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(imageBytes);
-        log.debug("[vLLM-CLIENT] Изображение конвертировано в Base64. Длина строки: {}", base64Image.length());
+        log.debug("[gpt-5.4-nano] Изображение конвертировано в Base64. Длина строки: {}", base64Image.length());
 
         Map<String, Object> requestBody = Map.of(
                 "model", localModel.trim(),
@@ -378,46 +426,50 @@ public class OCRService {
                         ))
                 ),
                 "temperature", localTemperature,
-                "max_tokens", maxTokens
+                "max_completion_tokens", maxTokens
         );
 
-        log.info("[vLLM-CLIENT] Отправка POST /v1/chat/completions на http://127.0.0.1:8000...");
+        log.info("[gpt-5.4-nano] Отправка POST /v1/chat/completions");
         long startTime = System.currentTimeMillis();
 
         return localWebClient.post()
-                .uri("/v1/chat/completions")
+                .uri("/chat/completions")
                 .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer " + deepSeekApiKey)
                 .bodyValue(requestBody)
                 .retrieve()
                 .bodyToMono(Map.class)
                 .map(response -> {
                     long endTime = System.currentTimeMillis();
-                    log.info("[vLLM-CLIENT] Получен ответ от vLLM. Время выполнения запроса: {} мс", (endTime - startTime));
-                    log.debug("[vLLM-CLIENT] Сырой ответ (Map): {}", response);
+                    log.info("[gpt-5.4-nano] Получен ответ от gpt-5.4-nano. Время выполнения запроса: {} мс", (endTime - startTime));
+                    log.debug("[gpt-5.4-nano] Сырой ответ (Map): {}", response);
                     return extractContentFromResponse(response);
                 })
-                .doOnError(err -> log.error("[vLLM-CLIENT] Ошибка при запросе к локальной vLLM: {}", err.getMessage(), err))
+                .doOnError(err -> log.error("[gpt-5.4-nano] Ошибка при запросе к gpt-5.4-nano: {}", err.getMessage(), err))
+                .doOnError(WebClientResponseException.class, ex -> {
+                    log.error("Детальная ошибка от ProxyAPI: Код {}, Тело: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+                })
                 .retryWhen(Retry.fixedDelay(2, Duration.ofSeconds(2))
                         .onRetryExhaustedThrow((spec, signal) -> signal.failure()));
     }
 
-    private Mono<String> callMathSolver(String problemText) {
+    private Mono<String> mathSolver(String problemText) {
         log.info("[DEEPSEEK-CLIENT] Подготовка запроса к DeepSeek. Модель: {}", deepSeekModel);
         log.debug("[DEEPSEEK-CLIENT] Задача для решения:\n{}", problemText);
 
         Map<String, Object> requestBody = Map.of(
                 "model", deepSeekModel,
                 "messages", List.of(
-                        Map.of("role", "user", "content", MATH_SOLVER_PROMPT + "\n\n" + problemText)
+                        Map.of("role", "user", "content", MATH_PROMPT + "\n\n" + problemText)
                 ),
                 "temperature", 0.1,
-                "max_tokens", 4096
+                "max_completion_tokens", 4096
         );
 
         long startTime = System.currentTimeMillis();
 
         return deepSeekWebClient.post()
-                .uri("/v1/chat/completions")
+                .uri("/chat/completions")
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("Authorization", "Bearer " + deepSeekApiKey)
                 .bodyValue(requestBody)
