@@ -18,11 +18,11 @@ import ru.hotdog.multicam_api.service.impl.UserDetailsImpl;
 @Service
 @RequiredArgsConstructor
 public class UserService implements ReactiveUserDetailsService {
+
     private final UserRepo userRepo;
     private final SaveResultRepo saveResultRepo;
     private final ObjectMapper objectMapper;
     private final PasswordEncoder passwordEncoder;
-
 
     @Override
     public Mono<UserDetails> findByUsername(String email) {
@@ -35,12 +35,11 @@ public class UserService implements ReactiveUserDetailsService {
 
     public Mono<SaveResultEntity> saveResult(SaveRequest request, String email) {
         return userRepo.findByEmail(email)
-                .flatMap( user -> {
+                .flatMap(user -> {
                     SaveResultEntity entity = new SaveResultEntity();
                     entity.setCategory(request.getCategory());
                     entity.setImageUrl(request.getImageUrl());
                     entity.setUserId(user.getId());
-
                     try {
                         String jsonString = objectMapper.writeValueAsString(request.getClientJson());
                         entity.setJsonData(jsonString);
@@ -49,12 +48,28 @@ public class UserService implements ReactiveUserDetailsService {
                     }
                     return saveResultRepo.save(entity);
                 })
-                .switchIfEmpty(Mono.error(() ->
-                        new RuntimeException("Пользователь не найден")));
+                .switchIfEmpty(Mono.error(() -> new RuntimeException("Пользователь не найден")));
     }
 
-    public Flux<SaveResultEntity> getLikes(String emal) {
-        return userRepo.findByEmail(emal)
+    /**
+     * Удаляет лайк. Проверяет, что запись принадлежит пользователю.
+     */
+    public Mono<Void> deleteLike(Long likeId, String email) {
+        return userRepo.findByEmail(email)
+                .switchIfEmpty(Mono.error(new RuntimeException("Пользователь не найден")))
+                .flatMap(user -> saveResultRepo.findById(likeId)
+                        .switchIfEmpty(Mono.error(new RuntimeException("Запись не найдена")))
+                        .flatMap(entity -> {
+                            if (!entity.getUserId().equals(user.getId())) {
+                                return Mono.error(new RuntimeException("Доступ запрещён"));
+                            }
+                            return saveResultRepo.delete(entity);
+                        })
+                );
+    }
+
+    public Flux<SaveResultEntity> getLikes(String email) {
+        return userRepo.findByEmail(email)
                 .flatMapMany(user -> saveResultRepo.findAllByUserId(user.getId()));
     }
 
