@@ -40,15 +40,17 @@ public class OCRService {
             Classify this image into exactly ONE category. Output ONLY the single category word — nothing else.
             
             Categories:
-            - 'math'    : Mathematical equations, formulas, graphs, geometric figures, physics problems
-            - 'mixed'   : Text combined with mathematical formulas or diagrams
-            - 'text'    : Printed or handwritten text without math (documents, notes, signs)
-            - 'food'    : Food items, meals, dishes, beverages, ingredients on a plate/surface
-            - 'objects' : A clearly identifiable physical product or item (electronics, clothing, toys, tools, accessories, household items)
-            - 'image'   : People, animals, nature, abstract scenes, architecture, art
-            - 'noise'   : A table surface, floor, wall, empty background, blurry or unrecognizable content
+            - 'physics'   : Physics problems — mechanics, thermodynamics, electromagnetism, optics, circuits, vectors, Newton's laws, energy, velocity, acceleration.
+            - 'chemistry' : Chemistry — chemical reactions, molecular/structural formulas, periodic table, balancing equations, stoichiometry, lab equipment.
+            - 'math'      : Pure mathematics ONLY — algebra, calculus, trigonometry, geometry, inequalities, functions. NOT physics, NOT chemistry.
+            - 'mixed'     : Text combined with mathematical formulas or diagrams.
+            - 'text'      : Printed or handwritten text without math (documents, notes, signs).
+            - 'food'      : Food items, meals, dishes, beverages, ingredients.
+            - 'objects'   : A clearly identifiable physical product or item (electronics, clothing, toys, tools).
+            - 'image'     : People, animals, nature, abstract scenes, architecture, art.
+            - 'noise'     : Table surface, floor, wall, empty background, blurry content.
             
-            RULE: If the image is primarily background or surface with no clear target object — output 'noise'.
+            CRITICAL: 'physics' and 'chemistry' are SEPARATE from 'math'. If you see physical quantities (m, kg, N, J, V, A) or chemical formulas (H2O, CO2, NaCl) — it is NOT math.
             Output ONE word only. No punctuation.
             """;
 
@@ -106,62 +108,162 @@ public class OCRService {
             """;
 
     private static final String MATH_PROMPT = """
-                You are a strict Academic Tutor specializing in Mathematics (Algebra, Calculus, Trig) and Physics.
-                  Your goal is 100% accuracy. You must assume the user is a student who needs to see EVERY intermediate step.
-                
-                  ═══════════════════════════════════════════
-                  GLOBAL CONSTRAINTS
-                  ═══════════════════════════════════════════
-                  1. LANGUAGE: Output must be entirely in RUSSIAN.
-                  2. NOTATION: Use Soviet notation: 'tg' for tangent, 'ctg' for cotangent. NEVER use 'tan' or 'cot'.
-                  3. ATOMIC STEPS: Perform only ONE logical or algebraic operation per step. Do not combine simplification and substitution in one line.
-                  4. VERBOSITY: Do not summarize. Show full intermediate expressions.
-                     - BAD: "Simplify to get x=5"
-                     - GOOD: Show the equation, then show the simplified equation, then the result.
-                
-                  ═══════════════════════════════════════════ 
-                  REASONING PROTOCOL (INTERNAL)
-                  ═══════════════════════════════════════════
-                  Before generating the final LaTeX math block for any step, you must mentally verify:
-                  - Are signs (+/-) correct?
-                  - Did I miss a coefficient (like 1/3 or sqrt(3))?
-                  - Is the domain (ОДЗ) respected?
-                
-                  ═══════════════════════════════════════════
-                  OUTPUT STRUCTURE
-                  ═══════════════════════════════════════════
-                  Follow this exact Markdown structure:
-                
-                  ### Анализ задачи
-                  Briefly describe what is given and what is needed. If there is an image, describe the visible graph/formula text.
-                
-                  ### ОДЗ (Domain)
-                  Determine the valid domain for x. If none, write "ОДЗ: x ∈ R".
-                
-                  ### План решения
-                  List the strategy (e.g., "1. Group terms. 2. Use Pythagorean identity. 3. Solve quadratic.").
-                
-                  ### Решение
-                  Execute the plan step-by-step.
-                  Format for each step:
-                  **Шаг N:** [Name of operation]
-                  [Explanation in Russian]
-                  $$ [LaTeX Math Block] $$
-                
-                  ### Проверка
-                  Substitute the result back into the original expression to verify correctness.
-                
-                  ### Ответ
-                  Final answer clearly stated.
-                  $$ \\boxed{[Answer]} $$
-                
-                  ═══════════════════════════════════════════
-                  CRITICAL REMINDERS
-                  ═══════════════════════════════════════════
-                  - For Trig: $\\sin^2 x + \\cos^2 x = 1$.
-                  - For Physics: Show formula -> Show substitution with units -> Show result.
-                  - Never skip the "Plan" section. It grounds your logic.
-                 """;
+            You are a strict Academic Tutor specializing in Mathematics (Algebra, Calculus, Trig) and Physics.
+              Your goal is 100% accuracy. You must assume the user is a student who needs to see EVERY intermediate step.
+            
+              ═══════════════════════════════════════════
+              GLOBAL CONSTRAINTS
+              ═══════════════════════════════════════════
+              1. LANGUAGE: Output must be entirely in RUSSIAN.
+              2. NOTATION: Use Soviet notation: 'tg' for tangent, 'ctg' for cotangent. NEVER use 'tan' or 'cot'.
+              3. ATOMIC STEPS: Perform only ONE logical or algebraic operation per step. Do not combine simplification and substitution in one line.
+              4. VERBOSITY: Do not summarize. Show full intermediate expressions.
+                 - BAD: "Simplify to get x=5"
+                 - GOOD: Show the equation, then show the simplified equation, then the result.
+            
+              ═══════════════════════════════════════════ 
+              REASONING PROTOCOL (INTERNAL)
+              ═══════════════════════════════════════════
+              Before generating the final LaTeX math block for any step, you must mentally verify:
+              - Are signs (+/-) correct?
+              - Did I miss a coefficient (like 1/3 or sqrt(3))?
+              - Is the domain (ОДЗ) respected?
+            
+              ═══════════════════════════════════════════
+              OUTPUT STRUCTURE
+              ═══════════════════════════════════════════
+              Follow this exact Markdown structure:
+            
+              ### Анализ задачи
+              Briefly describe what is given and what is needed. If there is an image, describe the visible graph/formula text.
+            
+              ### ОДЗ (Domain)
+              Determine the valid domain for x. If none, write "ОДЗ: x ∈ R".
+            
+              ### План решения
+              List the strategy (e.g., "1. Group terms. 2. Use Pythagorean identity. 3. Solve quadratic.").
+            
+              ### Решение
+              Execute the plan step-by-step.
+              Format for each step:
+              **Шаг N:** [Name of operation]
+              [Explanation in Russian]
+              $$ [LaTeX Math Block] $$
+            
+              ### Проверка
+              Substitute the result back into the original expression to verify correctness.
+            
+              ### Ответ
+              Final answer clearly stated.
+              $$ \\boxed{[Answer]} $$
+            
+              ═══════════════════════════════════════════
+              CRITICAL REMINDERS
+              ═══════════════════════════════════════════
+              - For Trig: $\\sin^2 x + \\cos^2 x = 1$.
+              - For Physics: Show formula -> Show substitution with units -> Show result.
+              - Never skip the "Plan" section. It grounds your logic.
+            """;
+
+    private static final String PHYSICS_PROMPT = """
+            You are a strict Academic Tutor specializing in Physics (Mechanics, Thermodynamics, Electromagnetism, Optics, Quantum Physics).
+              Your goal is 100% accuracy. You must assume the user is a student who needs to see EVERY intermediate step of physical derivation and calculation.
+            
+              ═══════════════════════════════════════════
+              GLOBAL CONSTRAINTS
+              ═══════════════════════════════════════════
+              1. LANGUAGE: Output must be entirely in RUSSIAN.
+              2. NOTATION: Use standard Russian/Soviet physics notation (e.g., 'Дано', 'СИ', 'Решение', 'p' for pressure, 'U' for internal energy).
+              3. ATOMIC STEPS: Perform only ONE physical or algebraic operation per step. Do not combine substituting numbers and calculating the result in one line.
+              4. UNITS OF MEASUREMENT: Every physical quantity during calculations and in the final answer MUST have its unit of measurement specified (e.g., кг, м/с², Дж).
+              5. VERBOSITY: Do not skip algebraic transformations of formulas. Show how the final working formula is derived from the base laws.
+            
+              ═══════════════════════════════════════════ 
+              REASONING PROTOCOL (INTERNAL)
+              ═══════════════════════════════════════════
+              Before generating the final LaTeX math block for any step, you must mentally verify:
+              - Are the core physical laws applicable to this specific case (e.g., is friction negligible, is the system isolated)?
+              - Vector vs Scalar: Did I correctly project vectors onto the coordinate axes?
+              - Are all units correctly converted to the SI system?
+            
+              ═══════════════════════════════════════════
+              OUTPUT STRUCTURE
+              ═══════════════════════════════════════════
+              Follow this exact Markdown structure:
+            
+              ### Анализ задачи и Дано
+              Briefly describe the physical phenomenon. Write down the "Дано" (given values) and convert them to the SI system ("СИ") if necessary using a clear layout.
+            
+              ### Физические законы
+              List the fundamental physics laws, principles, or equations that apply to this problem (e.g., "Newton's Second Law", "Law of Conservation of Energy").
+            
+              ### План решения
+              List the strategy (e.g., "1. Draw forces and choose coordinate axes. 2. Project Newton's second law onto OX and OY. 3. Express acceleration. 4. Substitute values.").
+            
+              ### Решение
+              Execute the plan step-by-step.
+              Format for each step:
+              **Шаг N:** [Name of physical or algebraic operation]
+              [Explanation in Russian, highlighting physical intuition]
+              $$ [LaTeX Math Block showing symbols first, then number substitution with units] $$
+            
+              ### Проверка размерности (Dimensional Analysis)
+              Check the final derived formula by substituting units only to ensure the resulting unit matches the target quantity.
+            
+              ### Ответ
+              Final answer clearly stated with proper units.
+              $$ \\boxed{[Answer]} $$
+            """;
+
+    private static final String CHEMISTRY_PROMPT = """
+            You are a strict Academic Tutor specializing in Chemistry (General, Inorganic, Organic, Physical Chemistry).
+              Your goal is 100% accuracy. You must assume the user is a student who needs to see EVERY step of balancing equations and chemical stoichiometry.
+            
+              ═══════════════════════════════════════════
+              GLOBAL CONSTRAINTS
+              ═══════════════════════════════════════════
+              1. LANGUAGE: Output must be entirely in RUSSIAN.
+              2. NOTATION: Use standard chemical formulas and state symbols if relevant. Use proper Russian terminology (e.g., 'Молярная масса', 'Количество вещества', 'Выход реакции').
+              3. ATOMIC STEPS: Perform only ONE chemical or mathematical operation per step. Do not combine writing a reaction equation and balancing it in one line.
+              4. MOLAR RATIOS: Explicitly show the mole ratios from the balanced equation before doing weight/volume calculations.
+              5. VERBOSITY: Always show intermediate molar masses ($M$) with units (г/моль).
+            
+              ═══════════════════════════════════════════ 
+              REASONING PROTOCOL (INTERNAL)
+              ═══════════════════════════════════════════
+              Before generating the final LaTeX block for any step, you must mentally verify:
+              - Is the chemical equation perfectly balanced? Check the atom count for EVERY element on both sides.
+              - Redox reactions: If it's a redox reaction, verify electron balance internally.
+              - Limiting Reactant: Did I check which reagent is in deficit/excess?
+            
+              ═══════════════════════════════════════════
+              OUTPUT STRUCTURE
+              ═══════════════════════════════════════════
+              Follow this exact Markdown structure:
+            
+              ### Анализ задачи и Дано
+              Briefly describe the chemical process. Write down what is given (mass, volume, concentration) and what needs to be found.
+            
+              ### Уравнения реакций
+              Write down the chemical reaction(s). If it needs balancing, show the unbalanced state first, then the balanced one.
+            
+              ### План решения
+              List the strategy (e.g., "1. Balance the chemical equation. 2. Find the molar masses. 3. Calculate moles of the starting material. 4. Determine the limiting reactant. 5. Find the mass of the product.").
+            
+              ### Решение
+              Execute the plan step-by-step.
+              Format for each step:
+              **Шаг N:** [Name of chemical or algebraic operation]
+              [Explanation in Russian]
+              $$ [LaTeX Math Block showing chemical formulas, proportions, or values with units] $$
+            
+              ### Проверка
+              Briefly verify the conservation of mass or check if the mole ratios match the coefficients of the balanced equation.
+            
+              ### Ответ
+              Final answer clearly stated with proper chemical units (г, л, моль, % etc.).
+              $$ \\boxed{[Answer]} $$
+            """;
 
     @Value("${deepseek.api.key:}")
     private String deepSeekApiKey;
@@ -180,40 +282,6 @@ public class OCRService {
     private final WebClient deepSeekWebClient;
     private final ObjectFilterService objectFilterService;
     private final ProductSearchService productSearchService;
-
-//    public OCRService(WebClient.Builder webClientBuilder,
-//                      ObjectFilterService objectFilterService,
-//                      ProductSearchService productSearchService) {
-//
-//        log.info("[INIT] Инициализация OCRService...");
-//
-//        HttpClient localHttpClient = HttpClient.create()
-//                .noProxy()
-//                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 100000)
-//                .responseTimeout(Duration.ofSeconds(1800))
-//                .doOnConnected(conn -> conn
-//                        .addHandlerLast(new ReadTimeoutHandler(1800, TimeUnit.SECONDS))
-//                        .addHandlerLast(new WriteTimeoutHandler(1800, TimeUnit.SECONDS)));
-//
-//        this.localWebClient = webClientBuilder
-//                .baseUrl(modelBaseUrl)
-//                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(localHttpClient))
-//                .build();
-//        log.info("[INIT] Local WebClient настроен на {} с таймаутом 1800 сек.", modelBaseUrl);
-//
-//        HttpClient deepSeekHttpClient = HttpClient.create()
-//                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
-//                .responseTimeout(Duration.ofSeconds(120));
-//
-//        this.deepSeekWebClient = webClientBuilder
-//                .baseUrl(deepSeekBaseUrl)
-//                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(deepSeekHttpClient))
-//                .build();
-//        log.info("[INIT] DeepSeek WebClient настроен.");
-//
-//        this.objectFilterService = objectFilterService;
-//        this.productSearchService = productSearchService;
-//    }
 
     public OCRService(WebClient.Builder webClientBuilder,
                       ObjectFilterService objectFilterService,
@@ -241,7 +309,7 @@ public class OCRService {
 
         HttpClient deepSeekHttpClient = HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
-                .responseTimeout(Duration.ofSeconds(120));
+                .responseTimeout(Duration.ofSeconds(350));
 
         this.deepSeekWebClient = webClientBuilder.clone()
                 .baseUrl(deepSeekBaseUrl)
@@ -267,6 +335,8 @@ public class OCRService {
         log.info("[ROUTER] Направление потока в обработчик категории: {}", category);
         return switch (category) {
             case "math", "mixed" -> handleMath(imageBytes);
+            case "physics" -> handlePhysics(imageBytes);
+            case "chemistry" -> handeleChemistry(imageBytes);
             case "text" -> handleText(imageBytes);
             case "food" -> handleFood(imageBytes);
             case "objects" -> handleObjs(imageBytes);
@@ -300,6 +370,32 @@ public class OCRService {
                     response.setTag("math");
                     response.setResult(solvedResult);
                     log.info("[HANDLER-MATH] Обработка математики успешно завершена.");
+                    return response;
+                });
+    }
+
+    private Mono<OCRResponse> handeleChemistry(byte[] imageBytes) {
+        log.info("[HANDLER-CHEMISTRY] Старт обработки запроса");
+        return scienceSolver(imageBytes, CHEMISTRY_PROMPT, 8192)
+                .map(res -> {
+                    log.debug("[HANDLER-CHEMISTRY] Распознанная задача:\n{}", res);
+                    OCRResponse response = new OCRResponse();
+                    response.setTag("сhemistry");
+                    response.setResult(res);
+                    log.info("[HANDLER-CHEMISTRY] Обработка успешно завершена");
+                    return response;
+                });
+    }
+
+    private Mono<OCRResponse> handlePhysics(byte[] imageBytes) {
+        log.info("[HANDLER-PHYSICS] Старт обработки запроса");
+        return scienceSolver(imageBytes, PHYSICS_PROMPT, 8192)
+                .map(res -> {
+                    log.debug("[HANDLER-PHYSICS] Распознанная задача:\n{}", res);
+                    OCRResponse response = new OCRResponse();
+                    response.setTag("physics");
+                    response.setResult(res);
+                    log.info("[HANDLER-PHYSICS] Обработка успешно завершена");
                     return response;
                 });
     }
@@ -365,7 +461,8 @@ public class OCRService {
                         log.debug("[HANDLER-OBJS] Строка после stripJsonFences:\n{}", clear);
 
                         List<DetectedObj> raw = objectMapper.readValue(
-                                clear, new TypeReference<List<DetectedObj>>() {}
+                                clear, new TypeReference<List<DetectedObj>>() {
+                                }
                         );
                         log.info("[HANDLER-OBJS] Распаршено {} объектов до фильтрации.", raw.size());
 
@@ -450,6 +547,53 @@ public class OCRService {
                     log.error("Детальная ошибка от ProxyAPI: Код {}, Тело: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
                 })
                 .retryWhen(Retry.fixedDelay(2, Duration.ofSeconds(2))
+                        .filter(err -> err instanceof WebClientResponseException ex
+                                ? ex.getStatusCode().is5xxServerError()
+                                : true)
+                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()));
+    }
+
+    private Mono<String> scienceSolver(byte[] imageBytes, String prompt, int maxTokens) {
+        log.info("[gemini-3.1-flash-lite] Подготовка запроса к модели. Модель: {}, maxTokens: {}", deepSeekModel, maxTokens);
+        log.debug("[gemini-3.1-flash-lite] Используемый промпт:\n{}", prompt);
+
+        String base64Image = "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(imageBytes);
+        log.debug("[gemini-3.1-flash-lite] Изображение конвертировано в Base64. Длина строки: {}", base64Image.length());
+
+        Map<String, Object> requestBody = Map.of(
+                "model", localModel.trim(),
+                "messages", List.of(
+                        Map.of("role", "user", "content", List.of(
+                                Map.of("type", "text", "text", prompt),
+                                Map.of("type", "image_url", "image_url", Map.of("url", base64Image))
+                        ))
+                ),
+//                "temperature", localTemperature,
+                "max_completion_tokens", maxTokens
+        );
+        log.info("[gemini-3.1-flash-lite] Отправка POST /v1/chat/completions");
+        long startTime = System.currentTimeMillis();
+        return localWebClient.post()
+                .uri("/chat/completions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer " + deepSeekApiKey)
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .map(response -> {
+                    long endTime = System.currentTimeMillis();
+                    log.info("[gemini-3.1-flash-lite] Получен ответ от gemini-3.1-flash-lite. Время выполнения запроса: {} мс", (endTime - startTime));
+                    log.debug("[gemini-3.1-flash-lite] Сырой ответ (Map): {}", response);
+                    return extractContentFromResponse(response);
+                })
+                .doOnError(err -> log.error("[gemini-3.1-flash-lite] Ошибка при запросе к gemini-3.1-flash-lite: {}", err.getMessage(), err))
+                .doOnError(WebClientResponseException.class, ex -> {
+                    log.error("Детальная ошибка от ProxyAPI: Код {}, Тело: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+                })
+                .retryWhen(Retry.fixedDelay(2, Duration.ofSeconds(2))
+                        .filter(err -> err instanceof WebClientResponseException ex
+                                ? ex.getStatusCode().is5xxServerError()
+                                : true)
                         .onRetryExhaustedThrow((spec, signal) -> signal.failure()));
     }
 
@@ -462,8 +606,8 @@ public class OCRService {
                 "messages", List.of(
                         Map.of("role", "user", "content", MATH_PROMPT + "\n\n" + problemText)
                 ),
-                "temperature", 0.1,
-                "max_completion_tokens", 4096
+//                "temperature", 0.1,
+                "max_completion_tokens", 8192
         );
 
         long startTime = System.currentTimeMillis();
@@ -480,7 +624,14 @@ public class OCRService {
                     log.info("[DEEPSEEK-CLIENT] Получен ответ от DeepSeek. Время: {} мс", (endTime - startTime));
                     return extractContentFromResponse(response);
                 })
-                .doOnError(err -> log.error("[DEEPSEEK-CLIENT] Ошибка API DeepSeek: {}", err.getMessage(), err));
+                .doOnError(err -> log.error("[DEEPSEEK-CLIENT] Ошибка: {}", err.getMessage()))
+                .doOnError(WebClientResponseException.class, ex ->
+                        log.error("[DEEPSEEK-CLIENT] Тело ошибки: {}", ex.getResponseBodyAsString()))
+                .retryWhen(Retry.fixedDelay(1, Duration.ofSeconds(5))
+                        .filter(err -> err instanceof WebClientResponseException ex
+                                ? ex.getStatusCode().is5xxServerError()
+                                : true)
+                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()));
     }
 
     private String stripJsonFences(String raw) {
@@ -497,6 +648,8 @@ public class OCRService {
         log.debug("[UTILS] Вызов normalizeCategory. Исходная строка: '{}'", raw);
         String clean = raw.toLowerCase().trim().replaceAll("[^a-z]", " ");
         if (clean.contains("math") || clean.contains("mixed")) return clean.contains("mixed") ? "mixed" : "math";
+        if (clean.contains("physics")) return "physics";
+        if (clean.contains("chemistry")) return "chemistry";
         if (clean.contains("food") || clean.contains("meal")) return "food";
         if (clean.contains("noise") || clean.contains("empty") || clean.contains("background")) return "noise";
         if (clean.contains("object") || clean.contains("product")) return "objects";
