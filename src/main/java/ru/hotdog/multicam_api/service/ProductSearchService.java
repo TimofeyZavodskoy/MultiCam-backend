@@ -11,9 +11,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Генерирует ссылки для поиска товара в российских маркетплейсах.
- */
 @Service
 @Slf4j
 public class ProductSearchService {
