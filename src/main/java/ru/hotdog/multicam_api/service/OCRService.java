@@ -297,10 +297,10 @@ public class OCRService {
         HttpClient localHttpClient = HttpClient.create()
                 .noProxy()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 100000)
-                .responseTimeout(Duration.ofSeconds(1800))
+                .responseTimeout(Duration.ofSeconds(180))
                 .doOnConnected(conn -> conn
-                        .addHandlerLast(new ReadTimeoutHandler(1800, TimeUnit.SECONDS))
-                        .addHandlerLast(new WriteTimeoutHandler(1800, TimeUnit.SECONDS)));
+                        .addHandlerLast(new ReadTimeoutHandler(180, TimeUnit.SECONDS))
+                        .addHandlerLast(new WriteTimeoutHandler(180, TimeUnit.SECONDS)));
 
         this.localWebClient = webClientBuilder.clone()
                 .baseUrl(modelBaseUrl)
@@ -309,7 +309,7 @@ public class OCRService {
 
         HttpClient deepSeekHttpClient = HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
-                .responseTimeout(Duration.ofSeconds(350));
+                .responseTimeout(Duration.ofSeconds(180));
 
         this.deepSeekWebClient = webClientBuilder.clone()
                 .baseUrl(deepSeekBaseUrl)
