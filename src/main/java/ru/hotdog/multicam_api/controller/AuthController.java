@@ -12,28 +12,28 @@ import ru.hotdog.multicam_api.service.UserService;
 import java.security.Principal;
 
 @RestController
-@RequestMapping("/auth")
+@RequestMapping({"/auth", "/api/auth"})
 @RequiredArgsConstructor
 public class AuthController {
 
     private final AuthService authService;
     private final UserService userService;
 
-    @PostMapping("/signup/save")
+    @PostMapping({"/signup/save", "/signup", "/register"})
     public Mono<ResponseEntity<String>> signup(@Valid @RequestBody Signup signupRequest) {
         return authService.registerUser(signupRequest)
                 .map(ResponseEntity::ok)
                 .onErrorResume(ex -> Mono.just(ResponseEntity.badRequest().body(ex.getMessage())));
     }
 
-    @PostMapping("/signup/guest")
+    @PostMapping({"/signup/guest", "/guest"})
     public Mono<ResponseEntity<TokenPair>> registerGuest(@RequestBody GuestRequest request) {
         return authService.registerGuest(request.getUuid())
                 .map(ResponseEntity::ok)
                 .onErrorResume(e -> Mono.just(ResponseEntity.status(500).build()));
     }
 
-    @PostMapping("/signin")
+    @PostMapping({"/signin", "/login"})
     public Mono<ResponseEntity<TokenPair>> signin(@Valid @RequestBody Signin signinRequest) {
         return authService.authUser(signinRequest)
                 .map(ResponseEntity::ok)

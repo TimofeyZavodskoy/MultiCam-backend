@@ -77,6 +77,10 @@ public class AuthService {
     // ── Refresh ───────────────────────────────────────────────────────────────
 
     public Mono<TokenPair> refresh(RefreshRequest request) {
+        if (request == null || request.getRefreshToken() == null || request.getRefreshToken().isBlank()) {
+            return Mono.error(new RuntimeException("Refresh token не передан"));
+        }
+
         return refreshTokenRepo.findByToken(request.getRefreshToken())
                 .switchIfEmpty(Mono.error(new RuntimeException("Refresh token не найден или отозван")))
                 .flatMap(tokenEntity -> {
