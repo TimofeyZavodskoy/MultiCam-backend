@@ -12,9 +12,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 		"deepseek.api.key=test",
 		"app.secret=01234567890123456789012345678901"
 })
+// Тест проверяет, что приложение запускается.
 class MulticamApiApplicationTests {
 
 	@Test
+	// Проверяет загрузку контекста Spring.
 	void contextLoads() {
 	}
 

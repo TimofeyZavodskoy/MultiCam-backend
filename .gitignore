@@ -1,4 +1,4 @@
-HELP.md
+`HELP.md
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
@@ -63,5 +63,9 @@ Thumbs.db
 node_modules/
 dist/
 
-*.yaml
 *.yml
+*.yaml
+# Local Database and Logs
+data/
+log.txt
+

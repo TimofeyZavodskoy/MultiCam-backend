@@ -28,30 +28,42 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
+// Главный сервис анализа картинок через модели.
 public class OCRService {
 
+    // Категории, которые умеет обрабатывать сервис.
     private static final Set<String> KNOWN_CATEGORIES = Set.of(
             "physics", "chemistry", "math", "mixed", "text", "food", "objects", "image", "noise"
     );
 
     @Value("${deepseek.api.key:}")
+    // Ключ для внешней модели DeepSeek.
     private String deepSeekApiKey;
 
     @Value("${deepseek.api.model:deepseek-chat}")
+    // Название модели DeepSeek.
     private String deepSeekModel;
 
     @Value("${llm.api.model}")
+    // Название локальной модели для картинки.
     private String localModel;
 
     @Value("${llm.api.temperature}")
+    // Температура ответа локальной модели.
     private double localTemperature;
 
+    // Помогает читать и писать JSON.
     private final ObjectMapper objectMapper = new ObjectMapper();
+    // Клиент для локальной модели.
     private final WebClient localWebClient;
+    // Клиент для DeepSeek.
     private final WebClient deepSeekWebClient;
+    // Убирает лишние найденные объекты.
     private final ObjectFilterService objectFilterService;
+    // Создает ссылки на товары.
     private final ProductSearchService productSearchService;
 
+    // Настраивает HTTP клиенты для моделей.
     public OCRService(WebClient.Builder webClientBuilder,
                       ObjectFilterService objectFilterService,
                       ProductSearchService productSearchService,
@@ -88,6 +100,7 @@ public class OCRService {
 
     // ── Public entry point ────────────────────────────────────────────────────
 
+    // Запускает полный анализ картинки.
     public Mono<OCRResponse> processRequest(byte[] imageBytes) {
         log.info("[PIPELINE-START] Получен запрос на обработку. Размер изображения: {} байт", imageBytes.length);
 
@@ -104,6 +117,7 @@ public class OCRService {
 
     // ── Router ────────────────────────────────────────────────────────────────
 
+    // Выбирает обработчик по категории картинки.
     private Mono<OCRResponse> categoryRouter(byte[] imageBytes, String category) {
         log.info("[ROUTER] Направление потока в обработчик категории: {}", category);
         return switch (category) {
@@ -130,6 +144,7 @@ public class OCRService {
 
     // ── Handlers ──────────────────────────────────────────────────────────────
 
+    // Распознает и решает математическую задачу.
     private Mono<OCRResponse> handleMath(byte[] imageBytes) {
         log.info("[HANDLER-MATH] Старт обработки. Шаг 1: Извлекаем текст из изображения.");
         return handleMathOCR(imageBytes)
@@ -148,6 +163,7 @@ public class OCRService {
                 });
     }
 
+    // Решает задачу по химии.
     private Mono<OCRResponse> handleChemistry(byte[] imageBytes) {
         log.info("[HANDLER-CHEMISTRY] Старт обработки запроса");
         return scienceSolver(imageBytes, OcrPrompt.CHEMISTRY, 8192)
@@ -161,6 +177,7 @@ public class OCRService {
                 });
     }
 
+    // Решает задачу по физике.
     private Mono<OCRResponse> handlePhysics(byte[] imageBytes) {
         log.info("[HANDLER-PHYSICS] Старт обработки запроса");
         return scienceSolver(imageBytes, OcrPrompt.PHYSICS, 8192)
@@ -174,6 +191,7 @@ public class OCRService {
                 });
     }
 
+    // Распознает обычный текст на картинке.
     private Mono<OCRResponse> handleText(byte[] imageBytes) {
         log.info("[HANDLER-TEXT] Старт обработки текста.");
         return sendToVllm(imageBytes, OcrPrompt.OCR, 1024)
@@ -187,6 +205,7 @@ public class OCRService {
                 });
     }
 
+    // Достает текст математической задачи.
     private Mono<OCRResponse> handleMathOCR(byte[] imageBytes) {
         log.info("[MATH-OCR] Старт обработки математического текста");
         return sendToVllm(imageBytes, OcrPrompt.EXTRACT, 2048)
@@ -200,6 +219,7 @@ public class OCRService {
                 });
     }
 
+    // Оценивает КБЖУ еды на картинке.
     private Mono<OCRResponse> handleFood(byte[] imageBytes) {
         log.info("[HANDLER-FOOD] Старт анализа КБЖУ.");
         return sendToVllm(imageBytes, OcrPrompt.FOOD, 512)
@@ -224,6 +244,7 @@ public class OCRService {
                 });
     }
 
+    // Находит объекты и ссылки на товары.
     private Mono<OCRResponse> handleObjs(byte[] imageBytes) {
         log.info("[HANDLER-OBJS] Старт детекции объектов.");
         return sendToVllm(imageBytes, OcrPrompt.DETECT, 1024)
@@ -264,6 +285,7 @@ public class OCRService {
                 });
     }
 
+    // Делает простое описание картинки.
     private Mono<OCRResponse> handleImage(byte[] imageBytes) {
         log.info("[HANDLER-IMAGE] Старт генерации описания изображения.");
         return sendToVllm(imageBytes, OcrPrompt.DESCRIPTION, 1024)
@@ -280,6 +302,7 @@ public class OCRService {
 
     // ── LLM clients ───────────────────────────────────────────────────────────
 
+    // Отправляет картинку в локальную модель.
     private Mono<String> sendToVllm(byte[] imageBytes, OcrPrompt prompt, int maxTokens) {
         log.info("[gpt-5.4-nano] Подготовка запроса к модели. Модель: {}, prompt: {}, maxTokens: {}",
                 localModel, prompt.name(), maxTokens);
@@ -321,6 +344,7 @@ public class OCRService {
                         .onRetryExhaustedThrow((spec, signal) -> signal.failure()));
     }
 
+    // Отправляет научную задачу во внешнюю модель.
     private Mono<String> scienceSolver(byte[] imageBytes, OcrPrompt prompt, int maxTokens) {
         log.info("[gemini-3.1-flash-lite] Подготовка запроса. Модель: {}, prompt: {}, maxTokens: {}",
                 deepSeekModel, prompt.name(), maxTokens);
@@ -361,6 +385,7 @@ public class OCRService {
                         .onRetryExhaustedThrow((spec, signal) -> signal.failure()));
     }
 
+    // Отправляет текст математической задачи в DeepSeek.
     private Mono<String> mathSolver(String problemText) {
         log.info("[DEEPSEEK-CLIENT] Подготовка запроса к DeepSeek. Модель: {}", deepSeekModel);
         log.debug("[DEEPSEEK-CLIENT] Задача для решения:\n{}", problemText);
@@ -396,6 +421,7 @@ public class OCRService {
 
     // ── Utils ─────────────────────────────────────────────────────────────────
 
+    // Убирает лишние блоки вокруг JSON.
     private String stripJsonFences(String raw) {
         log.debug("[UTILS] Вызов stripJsonFences. Исходная строка: {}", raw);
         String cleaned = raw.replaceAll("(?s)<think>.*?</think>\\s*", " ")
@@ -406,6 +432,7 @@ public class OCRService {
         return cleaned;
     }
 
+    // Приводит ответ классификатора к понятной категории.
     static String normalizeCategory(String raw) {
         log.debug("[UTILS] Вызов normalizeCategory. Исходная строка: '{}'", raw);
         if (raw == null || raw.isBlank()) return "";
@@ -429,6 +456,7 @@ public class OCRService {
     }
 
     @SuppressWarnings("unchecked")
+    // Достает текст ответа из JSON модели.
     private String extractContentFromResponse(Map<String, Object> response) {
         try {
             log.debug("[UTILS] Извлечение content из ответа...");

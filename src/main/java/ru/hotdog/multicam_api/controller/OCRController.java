@@ -20,11 +20,14 @@ import java.util.concurrent.CompletableFuture;
 @RequestMapping("/api/ocr")
 @RequiredArgsConstructor
 @Slf4j
+// Контроллер для обработки картинок.
 public class OCRController {
 
+    // Сервис анализа картинок.
     private final OCRService ocrService;
 
     @PostMapping(value = "/process", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    // Принимает картинку и отправляет ее на анализ.
     public Mono<ResponseEntity<OCRResponse>> process(@RequestPart("image") FilePart file) {
         return file.content()
                 .map(dataBuffer -> {
