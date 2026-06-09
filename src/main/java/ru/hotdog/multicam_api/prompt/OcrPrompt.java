@@ -5,8 +5,10 @@ import lombok.RequiredArgsConstructor;
 
 @Getter
 @RequiredArgsConstructor
+// Набор подсказок для разных задач анализа картинки.
 public enum OcrPrompt {
 
+    // Общие правила для модели.
     SYSTEM("""
             You are a precise visual analysis engine. Obey these rules without exception:
             1. ACCURACY FIRST: Only report what you can see with certainty. If unsure — omit, never guess.
@@ -16,6 +18,7 @@ public enum OcrPrompt {
             5. SCOPE: Focus on the primary subject. Ignore backgrounds, surfaces, and environmental context.
             """),
 
+    // Просит модель выбрать категорию картинки.
     CLASSIFIER("""
             Classify this image into exactly ONE category. Output ONLY the single category word — nothing else.
             
@@ -34,6 +37,7 @@ public enum OcrPrompt {
             Output ONE word only. No punctuation.
             """),
 
+    // Просит модель переписать математический текст.
     EXTRACT("""
             You are a precise mathematical OCR assistant specializing in handwritten formulas.
             Transcribe the mathematical problem from the image into LaTeX format exactly.
@@ -49,6 +53,7 @@ public enum OcrPrompt {
             - After the </think> tag, output ONLY the LaTeX code. No Markdown code blocks (```), no conversational filler.
             """),
 
+    // Просит модель распознать обычный текст.
     OCR("""
             Transcribe all visible text from the image.
             - Keep plain text as plain text.
@@ -56,6 +61,7 @@ public enum OcrPrompt {
             - Output ONLY valid Markdown. No commentary.
             """),
 
+    // Просит модель описать картинку.
     DESCRIPTION("""
             Follow this structured plan: 
             1. General Description. 
@@ -64,12 +70,14 @@ public enum OcrPrompt {
             Language: RUSSIAN. Be concise.
             """),
 
+    // Просит модель оценить еду и КБЖУ.
     FOOD("""
             Act as a nutritionist. Analyze food image.
             Return ONLY JSON: { "mass": int, "calories": int, "proteins": int, "fats": int, "carbs": int}.
             No markdown.
             """),
 
+    // Просит модель найти главные объекты.
     DETECT("""
             Detect and list the main physical objects in this image.
             
@@ -87,6 +95,7 @@ public enum OcrPrompt {
             - If no meaningful objects found: return []
             """),
 
+    // Просит модель решить задачу по математике.
     MATH("""
             You are a strict Academic Tutor specializing in Mathematics (Algebra, Calculus, Trig) and Physics.
               Your goal is 100% accuracy. You must assume the user is a student who needs to see EVERY intermediate step.
@@ -145,6 +154,7 @@ public enum OcrPrompt {
               - Never skip the "Plan" section. It grounds your logic.
             """),
 
+    // Просит модель решить задачу по физике.
     PHYSICS("""
             You are a strict Academic Tutor specializing in Physics (Mechanics, Thermodynamics, Electromagnetism, Optics, Quantum Physics).
               Your goal is 100% accuracy. You must assume the user is a student who needs to see EVERY intermediate step of physical derivation and calculation.
@@ -195,6 +205,7 @@ public enum OcrPrompt {
               $$ \\boxed{[Answer]} $$
             """),
 
+    // Просит модель решить задачу по химии.
     CHEMISTRY("""
             You are a strict Academic Tutor specializing in Chemistry (General, Inorganic, Organic, Physical Chemistry).
               Your goal is 100% accuracy. You must assume the user is a student who needs to see EVERY step of balancing equations and chemical stoichiometry.
@@ -245,5 +256,6 @@ public enum OcrPrompt {
               $$ \\boxed{[Answer]} $$
             """);
 
+    // Текст подсказки для отправки модели.
     private final String text;
 }

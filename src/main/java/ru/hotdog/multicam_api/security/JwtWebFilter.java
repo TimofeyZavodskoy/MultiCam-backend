@@ -16,12 +16,16 @@ import reactor.core.publisher.Mono;
 
 @Component
 @RequiredArgsConstructor
+// Фильтр проверяет JWT в каждом защищенном запросе.
 public class JwtWebFilter implements WebFilter {
 
+    // Помогает читать JWT токены.
     private final JwtConfig jwtConfig;
+    // Загружает пользователя по почте.
     private final ReactiveUserDetailsService userDetailsService;
 
     @Override
+    // Проверяет токен и добавляет пользователя в запрос.
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         String path = exchange.getRequest().getPath().pathWithinApplication().value();
         if (path.equals("/auth") || path.startsWith("/auth/") || exchange.getRequest().getMethod() == HttpMethod.OPTIONS) {

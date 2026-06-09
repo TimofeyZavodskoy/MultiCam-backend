@@ -12,8 +12,10 @@ import java.util.stream.Collectors;
 
 @Service
 @Slf4j
+// Сервис убирает лишние объекты из списка.
 public class ObjectFilterService {
 
+    // Названия объектов, которые считаются фоном или шумом.
     private static final Set<String> NOISE_LABELS = Set.of(
             "table", "desk", "chair", "sofa", "couch", "bench", "shelf", "counter",
             "cabinet", "drawer", "wardrobe", "bookshelf", "nightstand", "stool",
@@ -25,6 +27,7 @@ public class ObjectFilterService {
             "plate", "bowl", "tray"
     );
 
+    // Возвращает список без шумовых объектов.
     public List<DetectedObj> filter(List<DetectedObj> objects) {
         if (objects == null || objects.isEmpty()) {
             return Collections.emptyList();
@@ -41,6 +44,7 @@ public class ObjectFilterService {
         return filtered;
     }
 
+    // Проверяет, является ли объект шумом.
     private boolean isNoise(String label) {
         if (label == null || label.isBlank()) return true;
         String lower = label.toLowerCase().trim();
