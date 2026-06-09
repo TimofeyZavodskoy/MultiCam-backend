@@ -17,14 +17,20 @@ import ru.hotdog.multicam_api.service.impl.UserDetailsImpl;
 
 @Service
 @RequiredArgsConstructor
+// Сервис для пользователей и сохраненных результатов.
 public class UserService implements ReactiveUserDetailsService {
 
+    // Репозиторий пользователей.
     private final UserRepo userRepo;
+    // Репозиторий сохраненных результатов.
     private final SaveResultRepo saveResultRepo;
+    // Переводит объект результата в JSON.
     private final ObjectMapper objectMapper;
+    // Кодирует пароль при апгрейде гостя.
     private final PasswordEncoder passwordEncoder;
 
     @Override
+    // Загружает пользователя для Spring Security.
     public Mono<UserDetails> findByUsername(String email) {
         return userRepo.findByEmail(email)
                 .map(UserDetailsImpl::build)
@@ -33,6 +39,7 @@ public class UserService implements ReactiveUserDetailsService {
                         String.format("User with email '%s' not found", email))));
     }
 
+    // Сохраняет результат анализа для пользователя.
     public Mono<SaveResultEntity> saveResult(SaveRequest request, String email) {
         return userRepo.findByEmail(email)
                 .flatMap(user -> {
@@ -51,9 +58,7 @@ public class UserService implements ReactiveUserDetailsService {
                 .switchIfEmpty(Mono.error(() -> new RuntimeException("Пользователь не найден")));
     }
 
-    /**
-     * Удаляет лайк. Проверяет, что запись принадлежит пользователю.
-     */
+    // Удаляет лайк, если он принадлежит пользователю.
     public Mono<Void> deleteLike(Long likeId, String email) {
         return userRepo.findByEmail(email)
                 .switchIfEmpty(Mono.error(new RuntimeException("Пользователь не найден")))
@@ -68,11 +73,13 @@ public class UserService implements ReactiveUserDetailsService {
                 );
     }
 
+    // Возвращает сохраненные результаты пользователя.
     public Flux<SaveResultEntity> getLikes(String email) {
         return userRepo.findByEmail(email)
                 .flatMapMany(user -> saveResultRepo.findAllByUserId(user.getId()));
     }
 
+    // Меняет гостевой аккаунт на обычный.
     public Mono<UserEntity> upgradeGuest(String guestEmail, String newEmail, String newPassword, String username) {
         return userRepo.findByEmail(guestEmail)
                 .flatMap(user -> {

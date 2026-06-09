@@ -16,11 +16,14 @@ import java.security.Principal;
 @RequiredArgsConstructor
 @RequestMapping("/api/save")
 @Slf4j
+// Контроллер для сохраненных результатов пользователя.
 public class SavedResult {
 
+    // Сервис для сохранения и чтения лайков.
     private final UserService userService;
 
     @PostMapping("/like")
+    // Сохраняет результат анализа в лайки.
     public Mono<ResponseEntity<SaveResultEntity>> saveResult(
             @RequestBody SaveRequest request,
             Principal principal
@@ -34,6 +37,7 @@ public class SavedResult {
     }
 
     @DeleteMapping("/like/{id}")
+    // Удаляет сохраненный результат пользователя.
     public Mono<ResponseEntity<String>> deleteLike(
             @PathVariable Long id,
             Principal principal
@@ -47,6 +51,7 @@ public class SavedResult {
     }
 
     @GetMapping("/likes/all")
+    // Возвращает все лайки текущего пользователя.
     public Flux<SaveResultEntity> getAllLikes(Principal principal) {
         return userService.getLikes(principal.getName());
     }

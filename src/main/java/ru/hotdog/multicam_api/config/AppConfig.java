@@ -6,8 +6,10 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Configuration
+// Общие настройки приложения.
 public class AppConfig {
     @Bean
+    // Создает кодировщик паролей BCrypt.
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }

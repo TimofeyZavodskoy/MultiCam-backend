@@ -22,11 +22,14 @@ import java.util.List;
 @Configuration
 @EnableWebFluxSecurity
 @RequiredArgsConstructor
+// Настройки безопасности приложения.
 public class SecurityConfig {
 
+    // Фильтр для проверки JWT токена.
     private final JwtWebFilter jwtWebFilter;
 
     @Bean
+    // Собирает правила доступа к эндпоинтам.
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)

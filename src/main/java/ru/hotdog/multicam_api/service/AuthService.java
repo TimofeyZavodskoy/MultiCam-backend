@@ -22,15 +22,21 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+// Сервис для регистрации, входа и выдачи токенов.
 public class AuthService {
 
+    // Репозиторий пользователей.
     private final UserRepo userRepo;
+    // Репозиторий refresh token.
     private final RefreshTokenRepo refreshTokenRepo;
+    // Кодирует и проверяет пароли.
     private final PasswordEncoder passwordEncoder;
+    // Создает access token.
     private final JwtConfig jwtConfig;
 
     // ── Регистрация ───────────────────────────────────────────────────────────
 
+    // Регистрирует нового пользователя.
     public Mono<String> registerUser(Signup signupRequest) {
         return userRepo.existsByEmail(signupRequest.getEmail())
                 .flatMap(exists -> {
@@ -46,6 +52,7 @@ public class AuthService {
 
     // ── Вход ──────────────────────────────────────────────────────────────────
 
+    // Проверяет логин и пароль, потом выдает токены.
     public Mono<TokenPair> authUser(Signin signinRequest) {
         return userRepo.findByEmail(signinRequest.getEmail())
                 .switchIfEmpty(Mono.error(new RuntimeException("Неверный логин или пароль")))
@@ -59,6 +66,7 @@ public class AuthService {
 
     // ── Гостевой вход ─────────────────────────────────────────────────────────
 
+    // Создает гостя или входит в уже созданного гостя.
     public Mono<TokenPair> registerGuest(String uuid) {
         String guestEmail = uuid + "@guest.local";
 
@@ -76,6 +84,7 @@ public class AuthService {
 
     // ── Refresh ───────────────────────────────────────────────────────────────
 
+    // Проверяет refresh token и выдает новую пару токенов.
     public Mono<TokenPair> refresh(RefreshRequest request) {
         if (request == null || request.getRefreshToken() == null || request.getRefreshToken().isBlank()) {
             return Mono.error(new RuntimeException("Refresh token не передан"));
@@ -100,12 +109,14 @@ public class AuthService {
 
     // ── После апгрейда гостя ──────────────────────────────────────────────────
 
+    // Выдает токены после изменения гостя на обычного пользователя.
     public Mono<TokenPair> loginAfterUpgrade(UserEntity user) {
         return issueTokenPair(user);
     }
 
     // ── Внутренний метод: выдать пару токенов ─────────────────────────────────
 
+    // Создает access token и refresh token для пользователя.
     private Mono<TokenPair> issueTokenPair(UserEntity user) {
         UserDetailsImpl principal = UserDetailsImpl.build(user);
         Authentication auth = new UsernamePasswordAuthenticationToken(

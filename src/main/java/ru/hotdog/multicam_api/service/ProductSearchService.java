@@ -2,7 +2,7 @@ package ru.hotdog.multicam_api.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-// FIX #10: были ru.hotdog.backForApi.dto — правильный пакет ru.hotdog.multicam_api.dto
+// Берем DTO из нашего пакета приложения.
 import ru.hotdog.multicam_api.dto.DetectedObj;
 import ru.hotdog.multicam_api.dto.SearchResult;
 
@@ -13,12 +13,17 @@ import java.util.List;
 
 @Service
 @Slf4j
+// Сервис создает ссылки на поиск товаров.
 public class ProductSearchService {
 
+    // Базовая ссылка поиска Wildberries.
     private static final String WB_URL   = "https://www.wildberries.ru/catalog/0/search.aspx?search=";
+    // Базовая ссылка поиска Ozon.
     private static final String OZON_URL = "https://www.ozon.ru/search/?text=";
+    // Базовая ссылка поиска AliExpress.
     private static final String ALI_URL  = "https://aliexpress.ru/wholesale?SearchText=";
 
+    // Создает ссылки на маркетплейсы по названию объекта.
     public List<SearchResult> generateLinks(String objectLabel) {
         if (objectLabel == null || objectLabel.isBlank()) {
             log.warn("ProductSearchService: пустая метка объекта, ссылки не сгенерированы");
@@ -35,6 +40,7 @@ public class ProductSearchService {
         );
     }
 
+    // Выбирает главный объект и создает ссылки для него.
     public List<SearchResult> generateLinksForPrimaryObject(List<DetectedObj> detectedObjs) {
         if (detectedObjs == null || detectedObjs.isEmpty()) {
             return Collections.emptyList();

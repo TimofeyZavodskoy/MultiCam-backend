@@ -1,3 +1,4 @@
+-- Таблица хранит пользователей приложения.
 CREATE TABLE IF NOT EXISTS users (
     id                BIGSERIAL PRIMARY KEY,
     username          VARCHAR(255) NOT NULL ,
@@ -7,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at        TIMESTAMP DEFAULT NOW()
     );
 
+-- Таблица хранит сохраненные результаты анализа.
 CREATE TABLE IF NOT EXISTS saved_result (
     id                BIGSERIAL PRIMARY KEY,
     image_url         VARCHAR(1024),
@@ -16,6 +18,7 @@ CREATE TABLE IF NOT EXISTS saved_result (
     created_at        TIMESTAMP DEFAULT NOW()
 );
 
+-- Таблица хранит refresh token для входа.
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     id                BIGSERIAL PRIMARY KEY,
     user_id           BIGINT REFERENCES users(id) ON DELETE CASCADE,
